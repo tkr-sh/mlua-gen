@@ -97,7 +97,7 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                             (quote!(param), quote!((#ty)))
                         },
                         _ => {
-                            let args_ident = (0..field_unnamed.unnamed.len()).into_iter().map(|idx| {
+                            let args_ident = (0..field_unnamed.unnamed.len()).map(|idx| {
                                 let index = syn::Index::from(idx);
                                 quote!(param.#index)
                             });

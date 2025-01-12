@@ -166,20 +166,17 @@ impl FieldsVisibility {
                 .named
                 .iter()
                 .filter(|field| match self {
-                    FieldsVisibility::Pub => match (&field.vis).into() {
-                        FieldsVisibility::Pub => true,
-                        _ => false,
-                    },
-                    FieldsVisibility::PubCrate => match (&field.vis).into() {
-                        FieldsVisibility::Pub | FieldsVisibility::PubCrate => true,
-                        _ => false,
-                    },
-                    FieldsVisibility::PubSuper => match (&field.vis).into() {
+                    FieldsVisibility::Pub => matches!((&field.vis).into(), FieldsVisibility::Pub),
+                    FieldsVisibility::PubCrate => matches!(
+                        (&field.vis).into(),
+                        FieldsVisibility::Pub | FieldsVisibility::PubCrate
+                    ),
+                    FieldsVisibility::PubSuper => matches!(
+                        (&field.vis).into(),
                         FieldsVisibility::Pub
-                        | FieldsVisibility::PubCrate
-                        | FieldsVisibility::PubSuper => true,
-                        _ => false,
-                    },
+                            | FieldsVisibility::PubCrate
+                            | FieldsVisibility::PubSuper
+                    ),
                     FieldsVisibility::Custom(v) => {
                         if let Some(ident) = field
                             .ident

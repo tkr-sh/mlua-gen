@@ -61,7 +61,7 @@ pub(crate) fn struct_builder(
                         (quote!(param), quote!((#ty)))
                     },
                     _ => {
-                        let args_ident = (0..method_or_fn.args.len()).into_iter().map(|idx| {
+                        let args_ident = (0..method_or_fn.args.len()).map(|idx| {
                             let index = syn::Index::from(idx);
                             quote!(param.#index)
                         });
@@ -69,7 +69,7 @@ pub(crate) fn struct_builder(
                         let args_ty = method_or_fn
                             .args
                             .iter()
-                            .map(|arg| parse_str::<syn::Type>(&arg).unwrap());
+                            .map(|arg| parse_str::<syn::Type>(arg).unwrap());
 
                         (quote!(#(#args_ident),*), quote!((#(#args_ty),*)))
                     },
