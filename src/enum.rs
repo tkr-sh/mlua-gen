@@ -1,16 +1,14 @@
 use proc_macro2::Span;
-use proc_macro2::TokenStream;
 use quote::quote;
 use quote::ToTokens;
-use syn::parse_str;
 use syn::Ident;
 use syn::Variant;
 
 pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
     name: &Ident,
     variants: I,
-    custom_field: Option<syn::Ident>,
-    custom_method_or_fn: Option<syn::Ident>,
+    _custom_field: Option<syn::Ident>,
+    _custom_method_or_fn: Option<syn::Ident>,
 ) -> proc_macro2::TokenStream {
     // Create the fields to access a value.
     let (fields, (fn_constructors, field_constructors)): (Vec<_>, (Vec<_>, Vec<_>)) = variants
