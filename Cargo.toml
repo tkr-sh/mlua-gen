@@ -13,12 +13,12 @@ exclude = ["LICENSE.md"]
 debug = []
 
 [dependencies]
-syn = {version = "2", features = ["full", "extra-traits"]}
-quote = "1"
-proc-macro2 = "1"
+syn = {version = "2.0", features = ["full", "extra-traits"]}
+quote = "1.0"
+proc-macro2 = "1.0"
 
 [dev-dependencies]
-mlua = { version = "0.10.2", features = ["lua54"] }
+mlua = { version = "0.10", features = ["lua54"] }
 
 [lib]
 proc-macro = true
