@@ -3,7 +3,7 @@ use mlua_gen::mlua_gen;
 #[test]
 pub fn test() {
     #[mlua_gen]
-    enum Ab {
+    pub(crate) enum Ab {
         Unit,
         Tuple(String, i32),
         Named { name: String, int: i32 },
