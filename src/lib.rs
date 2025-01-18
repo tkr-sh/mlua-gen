@@ -2,8 +2,6 @@ mod attr;
 mod r#enum;
 mod r#struct;
 
-pub(crate) use crate::attr::MethodOrFunction;
-
 use {
     attr::Attributes,
     proc_macro::TokenStream,
@@ -13,6 +11,8 @@ use {
     r#struct::struct_builder,
     syn::{parse_macro_input, Data, DeriveInput},
 };
+
+pub(crate) use crate::attr::MethodOrFunction;
 
 macro_rules! dbg {
     ($val:expr $(,)?) => {
@@ -152,7 +152,7 @@ macro_rules! dbg {
 /// ```lua
 /// local human = Human.default()
 /// human:set_age(42)
-/// print(human.age()) -- 42
+/// print(human:age()) -- 42
 /// ```
 ///
 /// #### `custom_field`
@@ -187,6 +187,60 @@ macro_rules! dbg {
 /// Value: `Ident`
 ///
 /// Same as `custom_field` but with `UserDataMethods`
+///
+/// ## Enum
+/// ### Example
+/// The following rust code
+/// ```rust
+/// use mlua_gen::mlua_gen;
+///
+/// #[mlua_gen(impl = [default(), name(&self)])]
+/// #[derive(Default)]
+/// enum Animal {
+///     #[default]
+///     Pig,
+///     Dog(String),
+///     Cat { name: String, age: u8 },
+/// }
+///
+/// impl Animal {
+///     pub(crate) fn name(&self) -> String {
+///         match self {
+///             Animal::Pig => "Piggy".to_owned(),
+///             Animal::Dog(name) => name.to_owned(),
+///             Animal::Cat { name, .. } => name.to_owned(),
+///         }
+///     }
+/// }
+/// ```
+///
+/// Can be used easily with the following lua code
+/// ```lua
+/// local pig = Animal.Pig -- or in our case, Animal:default()
+/// local dog = Animal.Dog ( "Doggo" )
+/// local cat = Animal.Cat { name = "Neko", age = 8 }
+///
+/// -- method call
+/// assert(pig:name() == "Piggy")
+/// assert(dog:name() == "Doggo")
+/// assert(cat:name() == "Neko")
+///
+/// -- access with field
+/// --- Pig
+/// assert(pig.pig)
+/// assert(pig.dog == nil)
+/// assert(pig.cat == nil)
+/// --- Dog
+/// assert(dog.pig == nil)
+/// assert(dog.dog[1] == "Doggo")
+/// assert(dog.cat == nil)
+/// --- Cat
+/// assert(cat.pig == nil)
+/// assert(cat.dog == nil)
+/// assert(cat.cat.name == "Neko")
+/// assert(cat.cat.age == 8)
+/// ```
+///
 #[proc_macro_attribute]
 pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
