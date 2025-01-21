@@ -1,4 +1,4 @@
-use {mlua_gen::mlua_gen, std::default};
+use mlua_gen::mlua_gen;
 
 #[test]
 pub fn test() {

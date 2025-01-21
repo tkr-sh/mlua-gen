@@ -11,13 +11,16 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
     custom_method_or_fn: Option<syn::Ident>,
 ) -> proc_macro2::TokenStream {
     // Create the fields to access a value.
-    let (fields, (fn_constructors, field_constructors)): (Vec<_>, (Vec<_>, Vec<_>)) = variants
+    let ((impl_from_lua_match, fields), (fn_constructors, field_constructors)): (
+        (Vec<_>, Vec<_>),
+        (Vec<_>, Vec<_>),
+    ) = variants
         .map(|variant| {
             let original_variant_string = variant.ident.to_string();
             let variant_ident = syn::Ident::new(&original_variant_string, Span::call_site());
             let variant_accessor_name = &original_variant_string.to_lowercase();
 
-            let (match_stmt_get, field_set, constructor) = match &variant.fields {
+            let (match_stmt_get, field_set, constructor, from_lua_impl) = match &variant.fields {
                 // For enum fields that are named
                 //
                 // ```
@@ -79,6 +82,13 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                                 }),
                             )
                         ),
+                        quote!(
+                            ::mlua::Value::Table(table) => {
+                                Some(Self::#variant_ident {
+                                    #(#field_constructors)*
+                                })
+                            },
+                        ),
                     )
                 },
                 // For enum fields that don't have a name / tuple
@@ -131,6 +141,16 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                         },
                     };
 
+                    // For impl from lua
+                    let impl_from_lua = (0..field_unnamed.unnamed.len()).map(|_| {
+                        quote!(::mlua::FromLua::from_lua(
+                            sequence_value.next().ok_or_else(|| {
+                                ::mlua::Error::runtime("Not enough values in sequence table.")
+                            })??,
+                            lua,
+                        )?)
+                    });
+
                     (
                         quote!(
                             match this {
@@ -146,8 +166,6 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                             reserved_fields.add_field_method_set(
                                 #variant_accessor_name,
                                 |lua, this, value: ::mlua::Table| {
-                                    println!("{value:#?}");
-                                    // println!("{:#?}", value.get(0).unwrap() as String);
                                     *this = Self::#variant_ident(
                                         #indexed
                                     );
@@ -160,6 +178,15 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                                 #original_variant_string,
                                 |_, param: #ty| Ok(Self::#variant_ident(#argument))
                             )
+                        ),
+                        quote!(
+                            ::mlua::Value::Table(table) => {
+                                let mut sequence_value: ::mlua::TableSequence<::mlua::Value> =
+                                    table.sequence_values();
+                                Some(Self::#variant_ident(
+                                    #(#impl_from_lua),*
+                                ))
+                            },
                         ),
                     )
                 },
@@ -182,22 +209,36 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                                 |_, _| Ok(Self::#variant_ident),
                             )
                         ),
+                        quote!(::mlua::Value::Boolean(_) => Some(Self::#variant_ident),),
                     )
                 },
             };
 
             (
-                quote!(
-                    reserved_fields.add_field_method_get(
-                        #variant_accessor_name,
-                        |lua, this| Ok(#match_stmt_get)
-                    );
-                    #field_set
+                (
+                    quote!(
+                        if let Ok(table_value) = table.get(#variant_accessor_name) {
+                            if let Some(value) = match table_value {
+                                #from_lua_impl
+                                ::mlua::Value::Nil => None,
+                                _ => return Err(::mlua::Error::runtime("Invalid data format.")),
+                            } {
+                                return Ok(value);
+                            }
+                        }
+                    ),
+                    quote!(
+                        reserved_fields.add_field_method_get(
+                            #variant_accessor_name,
+                            |lua, this| Ok(#match_stmt_get)
+                        );
+                        #field_set
 
-                    // reserved_fields.add_field_method_set(
-                    //     #variant_accessor_name,
-                    //     |lua, this, value| Ok(#match_stmt_get)
-                    // );
+                        // reserved_fields.add_field_method_set(
+                        //     #variant_accessor_name,
+                        //     |lua, this, value| Ok(#match_stmt_get)
+                        // );
+                    ),
                 ),
                 if matches!(variant.fields, syn::Fields::Unit) {
                     (quote!(), constructor)
@@ -207,13 +248,13 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
             )
         })
         .unzip();
-    // .collect::<Vec<TokenStream>>();
 
     let extra_fields = if let Some(field) = custom_field {
         quote! {#field(reserved_fields)}
     } else {
         quote!()
     };
+
     let extra_impls = if let Some(method_or_fn) = custom_method_or_fn {
         quote!(#method_or_fn(methods))
     } else {
@@ -221,6 +262,18 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
     };
 
     quote! {
+        impl ::mlua::FromLua for #name {
+            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name> {
+                match value {
+                    ::mlua::Value::Table(table) => {
+                        #(#impl_from_lua_match)*
+                        Err(::mlua::Error::runtime("No valid variant found."))
+                    },
+                    val => Err(::mlua::Error::runtime(format!("Expected a table. Got: {val:?}"))),
+                }
+            }
+        }
+
         impl ::mlua::UserData for #name {
             fn add_fields<T: ::mlua::UserDataFields<Self>>(reserved_fields: &mut T) {
                 #(#fields)*
