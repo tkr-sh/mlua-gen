@@ -6,7 +6,7 @@ fn test() {
     #[derive(Default)]
     pub(crate) struct Human {
         pub(crate) name: String,
-        age: u8,
+        age:             u8,
     }
 
     impl Human {

@@ -1,24 +1,32 @@
-use std::collections::VecDeque;
-
-use quote::ToTokens;
-use syn::{
-    meta::ParseNestedMeta, spanned::Spanned, ExprArray, Fields, Ident, Token, UnOp, Visibility,
+use {
+    quote::ToTokens,
+    std::collections::VecDeque,
+    syn::{
+        meta::ParseNestedMeta,
+        spanned::Spanned,
+        ExprArray,
+        Fields,
+        Ident,
+        Token,
+        UnOp,
+        Visibility,
+    },
 };
 
 #[derive(Default, Debug)]
 pub(crate) struct Attributes {
-    pub(crate) get: FieldsVisibility,
-    pub(crate) set: FieldsVisibility,
-    pub(crate) r#impl: Vec<MethodOrFunction>,
+    pub(crate) get:           FieldsVisibility,
+    pub(crate) set:           FieldsVisibility,
+    pub(crate) r#impl:        Vec<MethodOrFunction>,
     pub(crate) custom_fields: Option<Ident>,
-    pub(crate) custom_impls: Option<Ident>,
+    pub(crate) custom_impls:  Option<Ident>,
 }
 
 #[derive(Debug)]
 pub(crate) struct MethodOrFunction {
-    pub(crate) name: String,
-    pub(crate) args: Vec<String>,
-    pub(crate) is_mut: bool,
+    pub(crate) name:      String,
+    pub(crate) args:      Vec<String>,
+    pub(crate) is_mut:    bool,
     pub(crate) is_method: bool,
 }
 
@@ -44,12 +52,16 @@ impl Attributes {
                                 let mut args = fn_call
                                     .args
                                     .into_iter()
-                                    .filter_map(|exp| match exp {
-                                        syn::Expr::Path(ident) => Some(exprpath_to_string(ident)),
-                                        syn::Expr::Reference(ident) => {
-                                            Some(ident.into_token_stream().to_string())
-                                        },
-                                        _ => None,
+                                    .filter_map(|exp| {
+                                        match exp {
+                                            syn::Expr::Path(ident) => {
+                                                Some(exprpath_to_string(ident))
+                                            },
+                                            syn::Expr::Reference(ident) => {
+                                                Some(ident.into_token_stream().to_string())
+                                            },
+                                            _ => None,
+                                        }
                                     })
                                     .collect::<VecDeque<_>>();
 
@@ -59,8 +71,8 @@ impl Attributes {
                                 let first_arg = first_arg.as_deref();
 
                                 vec_elements.push(MethodOrFunction {
-                                    name: exprpath_to_string(ident),
-                                    is_mut: matches!(
+                                    name:      exprpath_to_string(ident),
+                                    is_mut:    matches!(
                                         &first_arg,
                                         Some("& mut self") | Some("mut self")
                                     ),
@@ -68,7 +80,7 @@ impl Attributes {
                                         &first_arg,
                                         Some("& mut self") | Some("& self")
                                     ),
-                                    args: args.into(),
+                                    args:      args.into(),
                                 });
                             }
                         } else {
@@ -162,46 +174,56 @@ impl FieldsVisibility {
 
     pub(crate) fn fields_from_visibility(&self, fields: &Fields) -> syn::Result<Vec<String>> {
         match fields {
-            Fields::Named(fields_named) => Ok(fields_named
-                .named
-                .iter()
-                .filter(|field| match self {
-                    FieldsVisibility::Pub => matches!((&field.vis).into(), FieldsVisibility::Pub),
-                    FieldsVisibility::PubCrate => matches!(
-                        (&field.vis).into(),
-                        FieldsVisibility::Pub | FieldsVisibility::PubCrate
-                    ),
-                    FieldsVisibility::PubSuper => matches!(
-                        (&field.vis).into(),
-                        FieldsVisibility::Pub
-                            | FieldsVisibility::PubCrate
-                            | FieldsVisibility::PubSuper
-                    ),
-                    FieldsVisibility::Custom(v) => {
-                        if let Some(ident) = field
+            Fields::Named(fields_named) => {
+                Ok(fields_named
+                    .named
+                    .iter()
+                    .filter(|field| {
+                        match self {
+                            FieldsVisibility::Pub => {
+                                matches!((&field.vis).into(), FieldsVisibility::Pub)
+                            },
+                            FieldsVisibility::PubCrate => {
+                                matches!(
+                                    (&field.vis).into(),
+                                    FieldsVisibility::Pub | FieldsVisibility::PubCrate
+                                )
+                            },
+                            FieldsVisibility::PubSuper => {
+                                matches!(
+                                    (&field.vis).into(),
+                                    FieldsVisibility::Pub |
+                                        FieldsVisibility::PubCrate |
+                                        FieldsVisibility::PubSuper
+                                )
+                            },
+                            FieldsVisibility::Custom(v) => {
+                                if let Some(ident) = field
+                                    .ident
+                                    .as_ref()
+                                    .expect("Is named => has ident")
+                                    .span()
+                                    .source_text()
+                                {
+                                    v.contains(&ident)
+                                } else {
+                                    false
+                                }
+                            },
+                            FieldsVisibility::All => true,
+                            FieldsVisibility::None => false,
+                        }
+                    })
+                    .filter_map(|field| {
+                        field
                             .ident
                             .as_ref()
                             .expect("Is named => has ident")
                             .span()
                             .source_text()
-                        {
-                            v.contains(&ident)
-                        } else {
-                            false
-                        }
-                    },
-                    FieldsVisibility::All => true,
-                    FieldsVisibility::None => false,
-                })
-                .filter_map(|field| {
-                    field
-                        .ident
-                        .as_ref()
-                        .expect("Is named => has ident")
-                        .span()
-                        .source_text()
-                })
-                .collect()),
+                    })
+                    .collect())
+            },
             Fields::Unnamed(_) => panic!("Shouldn't be a unnamed struct"),
             Fields::Unit => panic!("Shouldn't be a unit struct"),
         }

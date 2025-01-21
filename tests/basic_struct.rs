@@ -5,7 +5,7 @@ pub fn test() {
     #[mlua_gen(get = *, set = *, impl = [uwu(&self, i32, i32), owo(&mut self), new()])]
     struct Test {
         name: String,
-        int: u32,
+        int:  u32,
     }
 
     impl Test {
@@ -20,7 +20,7 @@ pub fn test() {
         fn new() -> Test {
             Test {
                 name: String::from("new"),
-                int: 0,
+                int:  0,
             }
         }
     }
@@ -31,7 +31,7 @@ pub fn test() {
             "test",
             Test {
                 name: String::from("name"),
-                int: 32,
+                int:  32,
             },
         )
         .unwrap();

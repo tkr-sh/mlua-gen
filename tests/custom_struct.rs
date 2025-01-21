@@ -5,7 +5,7 @@ pub fn test() {
     #[mlua_gen(custom_fields = fields, custom_impls = impls)]
     struct Human {
         pub name: String,
-        pub age: u8,
+        pub age:  u8,
     }
 
     fn fields<T: ::mlua::UserDataFields<Human>>(fields: &mut T) {
@@ -26,7 +26,7 @@ pub fn test() {
             "Human",
             Human {
                 name: String::from("name"),
-                age: 32,
+                age:  32,
             },
         )
         .unwrap();
