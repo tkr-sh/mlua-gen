@@ -257,6 +257,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                 let field_set = attributes.set.fields_from_visibility(&ds.fields)?;
                 Ok(struct_builder(
                     name,
+                    &ds.fields,
                     field_get,
                     field_set,
                     attributes.custom_fields,

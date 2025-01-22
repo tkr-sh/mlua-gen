@@ -35,7 +35,7 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
                         field_named
                             .named
                             .iter()
-                            .map(|named| named.ident.clone().expect("Is named"))
+                            .map(|named| named.ident.as_ref().expect("Is named"))
                             .map(|ident| {
                                 let stringified_ident = ident.to_token_stream().to_string();
                                 (

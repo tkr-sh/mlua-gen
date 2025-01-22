@@ -1,12 +1,13 @@
 use {
     crate::MethodOrFunction,
     proc_macro2::{Span, TokenStream},
-    quote::quote,
-    syn::{parse_str, Ident},
+    quote::{quote, ToTokens},
+    syn::{parse_str, Fields, Ident},
 };
 
 pub(crate) fn struct_builder(
     name: &Ident,
+    all_fields: &Fields,
     get_fields: Vec<String>,
     set_fields: Vec<String>,
     custom_field: Option<syn::Ident>,
@@ -14,7 +15,7 @@ pub(crate) fn struct_builder(
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream {
     // Field
-    let (field_get, field_set, field_extra) =
+    let (field_get, field_set, field_extra, struct_constructor) =
         (
             get_fields
                 .into_iter()
@@ -39,6 +40,46 @@ pub(crate) fn struct_builder(
                 quote!{#field(reserved_fields)}
             } else {
                 quote!()
+            },
+            match all_fields {
+                Fields::Named(fields) => {
+                    let named_fields_constructor = fields.named.iter()
+                        .map(|named| named.ident.as_ref().expect("Is named"))
+                        .map(|field| {
+                            let stringified_field = field.to_token_stream().to_string();
+                            quote!(#field: table.get(#stringified_field)?)
+
+                    });
+
+                    quote!(Self {
+                        #(#named_fields_constructor),*
+                    })
+
+                },
+                Fields::Unnamed(fields) => {
+                    // For impl from lua
+                    let impl_from_lua = (0..fields.unnamed.len()).map(|_| {
+                        quote!(::mlua::FromLua::from_lua(
+                            sequence_value.next().ok_or_else(|| {
+                                ::mlua::Error::runtime("Not enough values in sequence table.")
+                            })??,
+                            lua,
+                        )?)
+                    });
+
+                    quote!(
+                        {
+                            let mut sequence_value: ::mlua::TableSequence<::mlua::Value> =
+                                table.sequence_values();
+
+                            Self(
+                                #(#impl_from_lua),*
+                            )
+                        }
+                    )
+
+                },
+                Fields::Unit => quote!(Self) 
             }
         );
 
@@ -103,6 +144,17 @@ pub(crate) fn struct_builder(
     );
 
     quote! {
+        impl ::mlua::FromLua for #name {
+            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name> {
+                match value {
+                    ::mlua::Value::Table(table) => {
+                        Ok(#struct_constructor)
+                    },
+                    val => Err(::mlua::Error::runtime(format!("Expected a table. Got: {val:?}"))),
+                }
+            }
+        }
+
         impl ::mlua::UserData for #name {
             fn add_fields<T: ::mlua::UserDataFields<Self>>(reserved_fields: &mut T) {
                 #(#field_get)*
