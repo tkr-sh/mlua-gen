@@ -245,6 +245,7 @@ macro_rules! dbg {
 pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
 
     let mut attributes = Attributes::default();
     let attr_parser = syn::meta::parser(|meta| attributes.parse(meta));
@@ -257,6 +258,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                 let field_set = attributes.set.fields_from_visibility(&ds.fields)?;
                 Ok(struct_builder(
                     name,
+                    generics,
                     &ds.fields,
                     field_get,
                     field_set,

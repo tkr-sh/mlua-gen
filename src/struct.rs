@@ -2,11 +2,12 @@ use {
     crate::MethodOrFunction,
     proc_macro2::{Span, TokenStream},
     quote::{quote, ToTokens},
-    syn::{parse_str, Fields, Ident},
+    syn::{parse_str, punctuated::Punctuated, Fields, Generics, Ident},
 };
 
 pub(crate) fn struct_builder(
     name: &Ident,
+    generics: &Generics,
     all_fields: &Fields,
     get_fields: Vec<String>,
     set_fields: Vec<String>,
@@ -14,6 +15,33 @@ pub(crate) fn struct_builder(
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream {
+    let non_typed_generics = {
+        let non_typed_generics_vec = generics
+            .params
+            .iter()
+            .filter_map(|generic| {
+                match generic {
+                    syn::GenericParam::Type(ty) => {
+                        let mut mut_ty = ty.to_owned();
+
+                        mut_ty.colon_token = None;
+                        mut_ty.bounds = Punctuated::new();
+                        mut_ty.eq_token = None;
+                        mut_ty.default = None;
+
+                        Some(syn::GenericParam::Type(mut_ty))
+                    },
+                    syn::GenericParam::Const(_) => None,
+                    syn::GenericParam::Lifetime(_) => Some(generic.to_owned()),
+                }
+            })
+            .collect::<Vec<_>>();
+        match non_typed_generics_vec.as_slice() {
+            &[] => quote!(),
+            _ => quote!(<#(#non_typed_generics_vec),*>),
+        }
+    };
+
     // Field
     let (field_get, field_set, field_extra, struct_constructor) =
         (
@@ -79,7 +107,7 @@ pub(crate) fn struct_builder(
                     )
 
                 },
-                Fields::Unit => quote!(Self) 
+                Fields::Unit => quote!(Self),
             }
         );
 
@@ -144,8 +172,8 @@ pub(crate) fn struct_builder(
     );
 
     quote! {
-        impl ::mlua::FromLua for #name {
-            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name> {
+        impl #generics ::mlua::FromLua for #name #non_typed_generics {
+            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name #non_typed_generics> {
                 match value {
                     ::mlua::Value::Table(table) => {
                         Ok(#struct_constructor)
@@ -155,14 +183,14 @@ pub(crate) fn struct_builder(
             }
         }
 
-        impl ::mlua::UserData for #name {
-            fn add_fields<T: ::mlua::UserDataFields<Self>>(reserved_fields: &mut T) {
+        impl #generics ::mlua::UserData for #name #non_typed_generics {
+            fn add_fields<MluaUserDataFields: ::mlua::UserDataFields<Self>>(reserved_fields: &mut MluaUserDataFields) {
                 #(#field_get)*
                 #(#field_set)*
                 #field_extra
             }
 
-            fn add_methods<M: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut M) {
+            fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut MluaUserDataMethods) {
                 #(#method_or_fns)*
                 #method_or_fn_extra
             }

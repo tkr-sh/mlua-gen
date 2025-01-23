@@ -14,5 +14,5 @@ pub fn test() {
         .set("Test", Ab::Tuple(String::from("uwu"), 42))
         .unwrap();
 
-    lua.load(include_str!("./basic_enum.lua")).exec().unwrap();
+    assert!(lua.load(include_str!("./basic_enum.lua")).exec().is_ok());
 }
