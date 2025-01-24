@@ -1,15 +1,19 @@
 use {
+    crate::shared::non_typed_generics,
     proc_macro2::Span,
     quote::{quote, ToTokens},
-    syn::{Ident, Variant},
+    syn::{Generics, Ident, Variant},
 };
 
 pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
     name: &Ident,
+    generics: &Generics,
     variants: I,
     custom_field: Option<syn::Ident>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> proc_macro2::TokenStream {
+    let non_typed_generics = non_typed_generics(generics);
+
     // Create the fields to access a value.
     let ((impl_from_lua_match, fields), (fn_constructors, field_constructors)): (
         (Vec<_>, Vec<_>),
@@ -262,8 +266,8 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
     };
 
     quote! {
-        impl ::mlua::FromLua for #name {
-            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name> {
+        impl #generics ::mlua::FromLua for #name #non_typed_generics{
+            fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name #non_typed_generics> {
                 match value {
                     ::mlua::Value::Table(table) => {
                         #(#impl_from_lua_match)*
@@ -274,15 +278,15 @@ pub(crate) fn enum_builder<'l, I: Iterator<Item = &'l Variant>>(
             }
         }
 
-        impl ::mlua::UserData for #name {
-            fn add_fields<T: ::mlua::UserDataFields<Self>>(reserved_fields: &mut T) {
+        impl #generics ::mlua::UserData for #name #non_typed_generics {
+            fn add_fields<MluaUserDataFields: ::mlua::UserDataFields<Self>>(reserved_fields: &mut MluaUserDataFields) {
                 #(#fields)*
                 #(#field_constructors);*
                 ;
                 #extra_fields
             }
 
-            fn add_methods<M: ::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(methods: &mut MluaUserDataMethods) {
                 #(#fn_constructors);*
                 ;
                 #extra_impls

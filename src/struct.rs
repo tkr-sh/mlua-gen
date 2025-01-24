@@ -1,5 +1,5 @@
 use {
-    crate::MethodOrFunction,
+    crate::{shared::non_typed_generics, MethodOrFunction},
     proc_macro2::{Span, TokenStream},
     quote::{quote, ToTokens},
     syn::{parse_str, punctuated::Punctuated, Fields, Generics, Ident},
@@ -15,32 +15,7 @@ pub(crate) fn struct_builder(
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream {
-    let non_typed_generics = {
-        let non_typed_generics_vec = generics
-            .params
-            .iter()
-            .filter_map(|generic| {
-                match generic {
-                    syn::GenericParam::Type(ty) => {
-                        let mut mut_ty = ty.to_owned();
-
-                        mut_ty.colon_token = None;
-                        mut_ty.bounds = Punctuated::new();
-                        mut_ty.eq_token = None;
-                        mut_ty.default = None;
-
-                        Some(syn::GenericParam::Type(mut_ty))
-                    },
-                    syn::GenericParam::Const(_) => None,
-                    syn::GenericParam::Lifetime(_) => Some(generic.to_owned()),
-                }
-            })
-            .collect::<Vec<_>>();
-        match non_typed_generics_vec.as_slice() {
-            &[] => quote!(),
-            _ => quote!(<#(#non_typed_generics_vec),*>),
-        }
-    };
+    let non_typed_generics = non_typed_generics(generics);
 
     // Field
     let (field_get, field_set, field_extra, struct_constructor) =

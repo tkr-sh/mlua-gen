@@ -1,5 +1,6 @@
 mod attr;
 mod r#enum;
+mod shared;
 mod r#struct;
 
 use {
@@ -274,6 +275,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
         Data::Enum(ref de) => {
             dbg!(enum_builder(
                 name,
+                generics,
                 de.variants.iter(),
                 attributes.custom_fields,
                 attributes.custom_impls,
