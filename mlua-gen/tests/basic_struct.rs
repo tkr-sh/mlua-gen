@@ -1,4 +1,4 @@
-use mlua_gen::mlua_gen;
+use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
 pub fn test() {
@@ -26,15 +26,6 @@ pub fn test() {
     }
 
     let lua = mlua::Lua::new();
-    lua.globals()
-        .set(
-            "test",
-            Test {
-                name: String::from("name"),
-                int:  32,
-            },
-        )
-        .unwrap();
-
+    Test::to_globals(&lua).unwrap();
     lua.load(include_str!("./basic_struct.lua")).exec().unwrap();
 }

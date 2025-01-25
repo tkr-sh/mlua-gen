@@ -1,4 +1,4 @@
-use mlua_gen::mlua_gen;
+use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
 pub fn test() {
@@ -29,9 +29,10 @@ pub fn test() {
     }
 
     let lua = mlua::Lua::new();
-    lua.globals()
-        .set("Animal", Animal::Dog(String::from("Doggo")))
-        .unwrap();
+    Animal::to_globals(&lua).unwrap();
+    // lua.globals()
+    //     .set("Animal", Animal::Dog(String::from("Doggo")))
+    //     .unwrap();
 
     lua.load(include_str!("./custom_enum.lua")).exec().unwrap();
 }

@@ -1,3 +1,4 @@
+local test = Test({ name = "name", int = 32 })
 assert(test.new().name == "new")
 assert(test.name == "name")
 assert(test.int == 32)

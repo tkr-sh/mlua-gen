@@ -1,4 +1,4 @@
-local human = Human
+local human = Human({ age = 43, name = "Eden" })
 human.age = 42
 human.name = "Martin"
 assert(human.name_age == "Martin (42)")

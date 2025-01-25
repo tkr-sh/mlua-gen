@@ -24,10 +24,11 @@ pub(crate) struct Attributes {
 
 #[derive(Debug)]
 pub(crate) struct MethodOrFunction {
-    pub(crate) name:      String,
-    pub(crate) args:      Vec<String>,
-    pub(crate) is_mut:    bool,
-    pub(crate) is_method: bool,
+    pub(crate) name:    String,
+    pub(crate) args:    Vec<String>,
+    pub(crate) is_mut:  bool,
+    pub(crate) is_ref:  bool,
+    pub(crate) is_self: bool,
 }
 
 impl Attributes {
@@ -65,22 +66,33 @@ impl Attributes {
                                     })
                                     .collect::<VecDeque<_>>();
 
-                                // The first arg should be `self` | `&self` | `&mut self` | `mut
-                                // self`
-                                let first_arg = args.pop_front();
-                                let first_arg = first_arg.as_deref();
+                                let first_arg = args.front();
+                                let first_arg = first_arg.map(|s| s.as_str());
+                                let is_self = matches!(
+                                    &first_arg,
+                                    Some("& mut self") |
+                                        Some("mut self") |
+                                        Some("& self") |
+                                        Some("self")
+                                );
 
                                 vec_elements.push(MethodOrFunction {
-                                    name:      exprpath_to_string(ident),
-                                    is_mut:    matches!(
+                                    name: exprpath_to_string(ident),
+                                    is_mut: matches!(
                                         &first_arg,
                                         Some("& mut self") | Some("mut self")
                                     ),
-                                    is_method: matches!(
+                                    is_ref: matches!(
                                         &first_arg,
                                         Some("& mut self") | Some("& self")
                                     ),
-                                    args:      args.into(),
+                                    is_self,
+                                    args: {
+                                        if is_self {
+                                            args.pop_front();
+                                        }
+                                        args.into()
+                                    },
                                 });
                             }
                         } else {
@@ -224,7 +236,41 @@ impl FieldsVisibility {
                     })
                     .collect())
             },
-            Fields::Unnamed(_) => panic!("Shouldn't be a unnamed struct"),
+            Fields::Unnamed(fields_unnamed) => {
+                Ok(fields_unnamed
+                    .unnamed
+                    .iter()
+                    .enumerate()
+                    .filter(|(idx, field)| {
+                        match self {
+                            FieldsVisibility::Pub => {
+                                matches!((&field.vis).into(), FieldsVisibility::Pub)
+                            },
+                            FieldsVisibility::PubCrate => {
+                                matches!(
+                                    (&field.vis).into(),
+                                    FieldsVisibility::Pub | FieldsVisibility::PubCrate
+                                )
+                            },
+                            FieldsVisibility::PubSuper => {
+                                matches!(
+                                    (&field.vis).into(),
+                                    FieldsVisibility::Pub |
+                                        FieldsVisibility::PubCrate |
+                                        FieldsVisibility::PubSuper
+                                )
+                            },
+                            FieldsVisibility::Custom(v) => {
+                                let field = idx.to_string();
+                                v.contains(&field)
+                            },
+                            FieldsVisibility::All => true,
+                            FieldsVisibility::None => false,
+                        }
+                    })
+                    .map(|(idx, _)| idx.to_string())
+                    .collect())
+            },
             Fields::Unit => panic!("Shouldn't be a unit struct"),
         }
     }

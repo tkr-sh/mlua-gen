@@ -1,4 +1,4 @@
-use mlua_gen::mlua_gen;
+use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
 pub fn test() {
@@ -21,15 +21,16 @@ pub fn test() {
     }
 
     let lua = mlua::Lua::new();
-    lua.globals()
-        .set(
-            "Human",
-            Human {
-                name: String::from("name"),
-                age:  32,
-            },
-        )
-        .unwrap();
+    Human::to_globals(&lua).unwrap();
+    // lua.globals()
+    //     .set(
+    //         "Human",
+    //         Human {
+    //             name: String::from("name"),
+    //             age:  32,
+    //         },
+    //     )
+    //     .unwrap();
 
     lua.load(include_str!("./custom_struct.lua"))
         .exec()

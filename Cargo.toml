@@ -1,24 +1,15 @@
-[package]
-name = "mlua-gen"
-version = "0.1.5"
-edition = "2021"
-authors = ["tkr-sh"]
-license = "LGPL-3.0-or-later"
-description = "Generates code to easily use Rust's structs or enums in Lua with mlua"
-repository = "https://github.com/tkr-sh/mlua-gen"
-readme = "README.md"
-exclude = ["LICENSE.md"]
+[workspace]
+resolver = "2"
+members = [
+    "mlua-gen",
+    "mlua-gen-new",
+    "mlua-gen-macros",
+]
 
-[features]
-debug = []
-
-[dependencies]
+[workspace.dependencies]
 syn = {version = "2.0", features = ["full", "extra-traits"]}
 quote = "1.0"
 proc-macro2 = "1.0"
-
-[dev-dependencies]
-mlua = { version = "0.10", features = ["lua54"] }
-
-[lib]
-proc-macro = true
+mlua-gen-macros = {path = "mlua-gen-macros"}
+mlua-gen-new = {path = "mlua-gen-new"}
+mlua = { version = "0.10", features = ["lua54"]}

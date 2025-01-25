@@ -241,7 +241,6 @@ macro_rules! dbg {
 /// assert(cat.cat.name == "Neko")
 /// assert(cat.cat.age == 8)
 /// ```
-///
 #[proc_macro_attribute]
 pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -290,4 +289,10 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
         #code
     }
     .into()
+}
+
+enum StructKind {
+    Named,
+    Unnamed,
+    Unit,
 }
