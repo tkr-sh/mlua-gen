@@ -1,7 +1,7 @@
 use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
-fn yay() {
+fn test() {
     #[mlua_gen]
     enum Animal {
         Pig,

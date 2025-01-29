@@ -15,7 +15,7 @@ pub fn test() {
     }
 
     fn fields<T: ::mlua::UserDataFields<Animal>>(fields: &mut T) {
-        fields.add_field_method_get("horse", |_, this| Ok("No horse"));
+        fields.add_field_method_get("horse", |_, _this| Ok("No horse"));
     }
 
     fn impls<M: ::mlua::UserDataMethods<Animal>>(methods: &mut M) {
@@ -30,9 +30,6 @@ pub fn test() {
 
     let lua = mlua::Lua::new();
     Animal::to_globals(&lua).unwrap();
-    // lua.globals()
-    //     .set("Animal", Animal::Dog(String::from("Doggo")))
-    //     .unwrap();
 
     lua.load(include_str!("./custom_enum.lua")).exec().unwrap();
 }

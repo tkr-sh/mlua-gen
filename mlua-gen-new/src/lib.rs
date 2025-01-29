@@ -57,6 +57,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                         .iter()
                         .filter(|fun| !fun.is_self)
                         .collect(),
+                    generics,
                 );
 
                 let user_data = r#struct::user_data(
@@ -72,7 +73,8 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 Ok(quote!(#builder #user_data))
             })() {
-                Ok(e) => dbg!(e),
+                // Ok(e) => dbg!(e),
+                Ok(e) => e,
                 Err(synerr) => return synerr.into_compile_error().into(),
             }
         },
@@ -86,14 +88,14 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                     .filter(|fun| !fun.is_self)
                     .collect(),
             );
-            let user_data = dbg!(r#enum::user_data(
+            let user_data = r#enum::user_data(
                 name,
                 generics,
                 de.variants.iter(),
                 attributes.custom_fields,
                 attributes.custom_impls,
-            ));
-            quote!(#builder #user_data)
+            );
+            dbg!(quote!(#builder #user_data))
         },
         _ => panic!("Must annotate struct or enum"),
     };

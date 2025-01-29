@@ -10,9 +10,15 @@ use {
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for a struct
-pub fn builder(name: &Ident, ds: &DataStruct, functions: Vec<&MethodOrFunction>) -> TokenStream2 {
+pub fn builder(
+    name: &Ident,
+    ds: &DataStruct,
+    functions: Vec<&MethodOrFunction>,
+    generics: &Generics,
+) -> TokenStream2 {
     let builder_code = builder_for_fields(quote! {Self}, &ds.fields);
     let builder_fn_code = builder_for_functions(quote! {Self}, functions);
+    let no_ty_generics = remove_ty_from_generics(generics);
 
     // The reason for that is that, when we have a unit struct, we just want to be able to call it
     // like normal:
@@ -34,12 +40,12 @@ pub fn builder(name: &Ident, ds: &DataStruct, functions: Vec<&MethodOrFunction>)
     let table_fn_name = format!("{}_", name.to_string());
 
     quote! {
-        impl ::mlua_gen::LuaBuilder<
+        impl #generics ::mlua_gen::LuaBuilder<
             #return_type,
             ::mlua::Lua,
             ::mlua::Error,
             ::mlua::Table,
-        > for #name {
+        > for #name #no_ty_generics {
             fn lua_builder(lua: &::mlua::Lua) -> ::mlua::Result<#return_type> {
                 #builder_code
             }
@@ -49,10 +55,14 @@ pub fn builder(name: &Ident, ds: &DataStruct, functions: Vec<&MethodOrFunction>)
             }
 
             fn to_globals(lua: &::mlua::Lua) -> ::mlua::Result<()> {
-                lua.globals()
-                    .set(stringify!(#name), #name::lua_builder(&lua)?)?;
+                Self::to_globals_as(lua, stringify!(#name))
+            }
 
-                if let Some(table) = #name::lua_fn_builder(&lua)? {
+            fn to_globals_as<S: AsRef<str>>(lua: &::mlua::Lua, s: S) -> ::mlua::Result<()> {
+                lua.globals()
+                    .set(s.as_ref(), Self::lua_builder(&lua)?)?;
+
+                if let Some(table) = Self::lua_fn_builder(&lua)? {
                     lua.globals().set(#table_fn_name, table)?;
                 }
 

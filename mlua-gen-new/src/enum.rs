@@ -44,8 +44,23 @@ pub fn builder(name: &Ident, de: &DataEnum, functions: Vec<&MethodOrFunction>) -
             }
 
             fn to_globals(lua: &::mlua::Lua) -> ::mlua::Result<()> {
+                Self::to_globals_as(lua, stringify!(#name))
+            }
+
+            fn to_globals_as<S: AsRef<str>>(lua: &::mlua::Lua, s: S) -> ::mlua::Result<()> {
+                let table = #name::lua_builder(&lua)?;
+
+                if let Some(table_to_extend_with) = Self::lua_fn_builder(&lua)? {
+                    // Equivalent to extend, tho, doesn't seems to exists
+                    for pairs in table_to_extend_with.pairs() {
+                        let (k,v): (String, ::mlua::Function) = pairs?;
+
+                        table.set(k, v)?;
+                    }
+                }
+
                 lua.globals()
-                    .set(stringify!(#name), #name::lua_builder(&lua)?)?;
+                    .set(s.as_ref(), #name::lua_builder(&lua)?)?;
 
                 Ok(())
             }
