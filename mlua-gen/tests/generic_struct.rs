@@ -12,10 +12,7 @@ pub fn test() {
 
     let lua = mlua::Lua::new();
     Test::<String>::to_globals(&lua).unwrap();
-
-    lua.globals()
-        .set("TestInt", Test::<i32>::lua_builder(&lua).unwrap())
-        .unwrap();
+    Test::<i32>::to_globals_as(&lua, "TestInt").unwrap();
 
     lua.load(include_str!("./generic_struct.lua"))
         .exec()
