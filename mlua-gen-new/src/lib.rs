@@ -87,6 +87,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                     .iter()
                     .filter(|fun| !fun.is_self)
                     .collect(),
+                generics,
             );
             let user_data = r#enum::user_data(
                 name,

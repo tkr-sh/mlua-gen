@@ -11,7 +11,12 @@ use {
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for an enum
-pub fn builder(name: &Ident, de: &DataEnum, functions: Vec<&MethodOrFunction>) -> TokenStream2 {
+pub fn builder(
+    name: &Ident,
+    de: &DataEnum,
+    functions: Vec<&MethodOrFunction>,
+    generics: &Generics,
+) -> TokenStream2 {
     let (names, builders): (Vec<_>, Vec<_>) = de
         .variants
         .iter()
@@ -19,20 +24,21 @@ pub fn builder(name: &Ident, de: &DataEnum, functions: Vec<&MethodOrFunction>) -
             let var_name = &v.ident;
             (
                 var_name,
-                builder_for_fields(quote! {#name::#var_name}, &v.fields),
+                builder_for_fields(quote! {Self::#var_name}, &v.fields),
             )
         })
         .unzip();
+    let no_ty_generics = remove_ty_from_generics(generics);
 
     let builder_fn_code = builder_for_functions(quote! {Self}, functions);
 
     quote! {
-        impl ::mlua_gen::LuaBuilder<
+        impl #generics ::mlua_gen::LuaBuilder<
             ::mlua::Table,
             ::mlua::Lua,
             ::mlua::Error,
             ::mlua::Table,
-        > for #name {
+        > for #name #no_ty_generics {
             fn lua_builder(lua: &::mlua::Lua) -> ::mlua::Result<::mlua::Table> {
                 let enum_variants_table = lua.create_table()?;
                 #( enum_variants_table.set(stringify!(#names), #builders?)?; )*
@@ -48,7 +54,7 @@ pub fn builder(name: &Ident, de: &DataEnum, functions: Vec<&MethodOrFunction>) -
             }
 
             fn to_globals_as<S: AsRef<str>>(lua: &::mlua::Lua, s: S) -> ::mlua::Result<()> {
-                let table = #name::lua_builder(&lua)?;
+                let table = Self::lua_builder(&lua)?;
 
                 if let Some(table_to_extend_with) = Self::lua_fn_builder(&lua)? {
                     // Equivalent to extend, tho, doesn't seems to exists
@@ -60,7 +66,7 @@ pub fn builder(name: &Ident, de: &DataEnum, functions: Vec<&MethodOrFunction>) -
                 }
 
                 lua.globals()
-                    .set(s.as_ref(), #name::lua_builder(&lua)?)?;
+                    .set(s.as_ref(), Self::lua_builder(&lua)?)?;
 
                 Ok(())
             }
