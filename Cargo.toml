@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "mlua-gen",
-    "mlua-gen-new",
     "mlua-gen-macros",
 ]
 
@@ -11,5 +10,4 @@ syn = {version = "2.0", features = ["full", "extra-traits"]}
 quote = "1.0"
 proc-macro2 = "1.0"
 mlua-gen-macros = {path = "mlua-gen-macros"}
-mlua-gen-new = {path = "mlua-gen-new"}
 mlua = { version = "0.10", features = ["lua54"]}

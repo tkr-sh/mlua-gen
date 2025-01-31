@@ -87,21 +87,10 @@ version = "0.2.0"
 dependencies = [
  "mlua",
  "mlua-gen-macros",
- "mlua-gen-new",
 ]
 
 [[package]]
 name = "mlua-gen-macros"
-version = "0.1.0"
-dependencies = [
- "mlua",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "mlua-gen-new"
 version = "0.1.0"
 dependencies = [
  "mlua",
