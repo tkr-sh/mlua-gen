@@ -4,7 +4,6 @@ use {
         builder::{builder_for_fields, builder_for_functions},
         shared::remove_ty_from_generics,
     },
-    proc_macro::TokenStream,
     proc_macro2::{Span, TokenStream as TokenStream2},
     quote::{quote, ToTokens},
     syn::{DataEnum, Generics, Ident, Variant},

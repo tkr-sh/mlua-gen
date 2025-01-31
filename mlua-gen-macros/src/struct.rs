@@ -36,8 +36,7 @@ pub fn builder(
         Fields::Unnamed(..) | Fields::Named(..) => quote!(::mlua::Function),
     };
 
-    // TODO: generics
-    let table_fn_name = format!("{}_", name.to_string());
+    let table_fn_name = format!("{}_", name);
 
     quote! {
         impl #generics ::mlua_gen::LuaBuilder<

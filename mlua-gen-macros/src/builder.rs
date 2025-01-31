@@ -2,8 +2,8 @@ use {
     crate::attr::MethodOrFunction,
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
-    std::{borrow::Borrow, collections::VecDeque},
-    syn::{parse_str, DataEnum, Field, Fields, FieldsNamed, FieldsUnnamed, Ident},
+    std::borrow::Borrow,
+    syn::{parse_str, Field, Fields, FieldsNamed, FieldsUnnamed},
 };
 
 pub(crate) fn builder_for_functions(
