@@ -101,8 +101,6 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
         _ => panic!("Must annotate struct or enum"),
     };
 
-    // println!("{code}");
-
     quote! {
         #input
 
