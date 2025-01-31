@@ -27,7 +27,8 @@ pub(crate) struct MethodOrFunction {
     pub(crate) name:    String,
     pub(crate) args:    Vec<String>,
     pub(crate) is_mut:  bool,
-    pub(crate) is_ref:  bool,
+    // Unused for now
+    // pub(crate) is_ref:  bool,
     pub(crate) is_self: bool,
 }
 
@@ -82,10 +83,11 @@ impl Attributes {
                                         &first_arg,
                                         Some("& mut self") | Some("mut self")
                                     ),
-                                    is_ref: matches!(
-                                        &first_arg,
-                                        Some("& mut self") | Some("& self")
-                                    ),
+                                    // Unused for now
+                                    // is_ref: matches!(
+                                    //     &first_arg,
+                                    //     Some("& mut self") | Some("& self")
+                                    // ),
                                     is_self,
                                     args: {
                                         if is_self {
