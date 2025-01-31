@@ -1,4 +1,4 @@
-use mlua_gen::mlua_gen;
+use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
 pub fn test() {
@@ -6,9 +6,7 @@ pub fn test() {
     struct Unnamed(String, u32);
 
     let lua = mlua::Lua::new();
-    lua.globals()
-        .set("test", Unnamed(String::from("name"), 32))
-        .unwrap();
+    Unnamed::to_globals(&lua).unwrap();
 
     lua.load(include_str!("./unnamed_struct.lua"))
         .exec()

@@ -1,4 +1,4 @@
-use mlua_gen::mlua_gen;
+use mlua_gen::{mlua_gen, LuaBuilder};
 
 #[test]
 fn test() {
@@ -20,7 +20,7 @@ fn test() {
     }
 
     let lua = mlua::Lua::new();
-    lua.globals().set("Human", Human::default()).unwrap();
+    Human::to_globals(&lua).unwrap();
 
     lua.load(include_str!("./doc.lua")).exec().unwrap();
 }
