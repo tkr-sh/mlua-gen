@@ -273,7 +273,7 @@ impl FieldsVisibility {
                     .map(|(idx, _)| idx.to_string())
                     .collect())
             },
-            Fields::Unit => panic!("Shouldn't be a unit struct"),
+            Fields::Unit => Ok(Vec::new()),
         }
     }
 }

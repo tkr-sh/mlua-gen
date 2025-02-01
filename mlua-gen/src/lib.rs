@@ -40,3 +40,10 @@ pub trait LuaBuilder<R: IntoLua + FromLua, Lua, E, Table> {
     /// instead of the default Rust name.
     fn to_globals_as<S: AsRef<str>>(lua: &Lua, s: S) -> Result<(), E>;
 }
+
+#[macro_export]
+macro_rules! to_lua {
+    ($lua:ident, $($struct_or_enum:ident),*) => {
+        $($struct_or_enum::to_globals(&$lua)?);*
+    };
+}
