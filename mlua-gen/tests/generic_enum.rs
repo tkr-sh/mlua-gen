@@ -15,5 +15,5 @@ pub fn test() {
     Optional::<String>::to_globals(&lua).unwrap();
     Optional::<i32>::to_globals_as(&lua, "OptionalInt").unwrap();
 
-    lua.load(include_str!("./generic_enum.lua")).exec().unwrap()
+    lua.load(include_str!("./generic_enum.lua")).exec().unwrap();
 }

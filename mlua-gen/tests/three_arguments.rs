@@ -16,5 +16,5 @@ pub fn test() {
 
     lua.load(include_str!("./three_arguments.lua"))
         .exec()
-        .unwrap()
+        .unwrap();
 }

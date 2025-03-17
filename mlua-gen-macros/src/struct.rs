@@ -5,8 +5,9 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{quote, ToTokens},
-    syn::{parse_str, DataStruct, Field, Fields, Generics, Ident},
+    quote::{ToTokens, quote},
+    std::iter::repeat_with,
+    syn::{DataStruct, Field, Fields, Generics, Ident, parse_str},
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for a struct
@@ -16,8 +17,8 @@ pub fn builder(
     functions: Vec<&MethodOrFunction>,
     generics: &Generics,
 ) -> TokenStream2 {
-    let builder_code = builder_for_fields(quote! {Self}, &ds.fields);
-    let builder_fn_code = builder_for_functions(quote! {Self}, functions);
+    let builder_code = builder_for_fields(&quote! {Self}, &ds.fields);
+    let builder_fn_code = builder_for_functions(&quote! {Self}, functions);
     let no_ty_generics = remove_ty_from_generics(generics);
 
     // The reason for that is that, when we have a unit struct, we just want to be able to call it
@@ -36,7 +37,7 @@ pub fn builder(
         Fields::Unnamed(..) | Fields::Named(..) => quote!(::mlua::Function),
     };
 
-    let table_fn_name = format!("{}_", name);
+    let table_fn_name = format!("{name}_");
 
     quote! {
         impl #generics ::mlua_gen::LuaBuilder<
@@ -82,8 +83,6 @@ pub(crate) fn user_data(
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream2 {
-    let non_typed_generics = remove_ty_from_generics(generics);
-
     fn field_accessory_name_and_ident(field: String) -> (TokenStream2, String) {
         let is_int = field.chars().all(|c| c.is_ascii_digit());
         (
@@ -105,6 +104,8 @@ pub(crate) fn user_data(
             },
         )
     }
+
+    let non_typed_generics = remove_ty_from_generics(generics);
 
     // Field
     let (field_get, field_set, field_extra, struct_constructor) = (
@@ -161,14 +162,15 @@ pub(crate) fn user_data(
             },
             Fields::Unnamed(fields) => {
                 // For impl from lua
-                let impl_from_lua = (0..fields.unnamed.len()).map(|_| {
+                let impl_from_lua = repeat_with(|| {
                     quote!(::mlua::FromLua::from_lua(
                         sequence_value.next().ok_or_else(|| {
                             ::mlua::Error::runtime("Not enough values in sequence table.")
                         })??,
                         lua,
                     )?)
-                });
+                })
+                .take(fields.unnamed.len());
 
                 quote!(
                     {

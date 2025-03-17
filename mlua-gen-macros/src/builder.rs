@@ -3,11 +3,11 @@ use {
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
     std::borrow::Borrow,
-    syn::{parse_str, Field, Fields, FieldsNamed, FieldsUnnamed},
+    syn::{Field, Fields, FieldsNamed, FieldsUnnamed, parse_str},
 };
 
 pub(crate) fn builder_for_functions(
-    name: TokenStream2,
+    name: &TokenStream2,
     fns: Vec<&MethodOrFunction>,
 ) -> TokenStream2 {
     if fns.is_empty() {
@@ -22,12 +22,14 @@ pub(crate) fn builder_for_functions(
                     .enumerate()
                     .map(|(idx, ty)| {
                         (
-                            parse_str::<syn::Ident>(&format!("a{idx}")).unwrap(),
-                            parse_str::<syn::Type>(ty).unwrap(),
+                            parse_str::<syn::Ident>(&format!("a{idx}"))
+                                .expect("This should always be a valid ident"),
+                            parse_str::<syn::Type>(ty).expect("This should always be a valid type"),
                         )
                     })
                     .unzip();
-                let fn_name = parse_str::<syn::Ident>(&fun.name).unwrap();
+                let fn_name = parse_str::<syn::Ident>(&fun.name)
+                    .expect("This should always be a valid ident");
                 quote! {
                     table.set(stringify!(#fn_name),
                         lua.create_function(|this, (#(#args),*): (#(#tys),*)| {
@@ -48,7 +50,7 @@ pub(crate) fn builder_for_functions(
     }
 }
 
-pub(crate) fn builder_for_fields(name: TokenStream2, fields: &Fields) -> TokenStream2 {
+pub(crate) fn builder_for_fields(name: &TokenStream2, fields: &Fields) -> TokenStream2 {
     match fields {
         Fields::Unit => quote! { Ok::<_, ::mlua::Error>(#name) },
         Fields::Unnamed(unnamed) => builder_for_unnamed(name, unnamed),
@@ -56,7 +58,7 @@ pub(crate) fn builder_for_fields(name: TokenStream2, fields: &Fields) -> TokenSt
     }
 }
 
-fn builder_for_unnamed(name: TokenStream2, fields: &FieldsUnnamed) -> TokenStream2 {
+fn builder_for_unnamed(name: &TokenStream2, fields: &FieldsUnnamed) -> TokenStream2 {
     let (access, tys) = generate_tuple_access(fields.unnamed.iter());
 
     quote! {
@@ -66,7 +68,7 @@ fn builder_for_unnamed(name: TokenStream2, fields: &FieldsUnnamed) -> TokenStrea
     }
 }
 
-fn builder_for_named(name: TokenStream2, fields: &FieldsNamed) -> TokenStream2 {
+fn builder_for_named(name: &TokenStream2, fields: &FieldsNamed) -> TokenStream2 {
     let names = fields.named.iter().map(|x| &x.ident);
 
     quote! {
@@ -102,7 +104,7 @@ pub fn generate_tuple_access<'l, I: Iterator<Item = &'l Field>>(
                 (idx, arg): (usize, &B),
             ) -> (TokenStream2, syn::Type) {
                 let index = syn::Index::from(idx);
-                (quote!(args.#index), arg.borrow().ty.to_owned())
+                (quote!(args.#index), arg.borrow().ty.clone())
             }
 
             let (mut args_ident, mut tys): (Vec<_>, Vec<_>) = [first, second]

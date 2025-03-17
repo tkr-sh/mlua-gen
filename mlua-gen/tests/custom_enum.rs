@@ -1,4 +1,4 @@
-use mlua_gen::{mlua_gen, LuaBuilder};
+use mlua_gen::{LuaBuilder, mlua_gen};
 
 #[test]
 pub fn test() {
@@ -19,11 +19,10 @@ pub fn test() {
     }
 
     fn impls<M: ::mlua::UserDataMethods<Animal>>(methods: &mut M) {
-        methods.add_method("name", |_, this, _: ()| {
+        methods.add_method("name", |_, this, (): ()| {
             Ok(match this {
                 Animal::Pig => "Piggy".to_string(),
-                Animal::Dog(name) => name.to_owned(),
-                Animal::Cat { name, .. } => name.to_owned(),
+                Animal::Dog(name) | Animal::Cat { name, .. } => name.to_owned(),
             })
         });
     }

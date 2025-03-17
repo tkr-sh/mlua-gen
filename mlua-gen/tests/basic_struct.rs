@@ -1,4 +1,4 @@
-use mlua_gen::{mlua_gen, LuaBuilder};
+use mlua_gen::{LuaBuilder, mlua_gen};
 
 #[test]
 pub fn test() {
@@ -10,7 +10,7 @@ pub fn test() {
 
     impl Test {
         fn uwu(&self, a: i32, b: i32) -> i32 {
-            a + b
+            i32::try_from(self.int).unwrap() + a + b
         }
 
         fn owo(&mut self) {

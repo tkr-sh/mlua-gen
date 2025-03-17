@@ -3,7 +3,7 @@ use {
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
-    syn::{parse_macro_input, Data, DeriveInput},
+    syn::{Data, DeriveInput, parse_macro_input},
 };
 
 mod attr;
@@ -40,7 +40,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
     let generics = &input.generics;
 
     let mut attributes = Attributes::default();
-    let attr_parser = syn::meta::parser(|meta| attributes.parse(meta));
+    let attr_parser = syn::meta::parser(|meta| attributes.parse(&meta));
     parse_macro_input!(args with attr_parser);
 
     let code = match input.data {
@@ -98,7 +98,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
             );
             dbg!(quote!(#builder #user_data))
         },
-        _ => panic!("Must annotate struct or enum"),
+        Data::Union(_) => panic!("Must annotate struct or enum"),
     };
 
     quote! {

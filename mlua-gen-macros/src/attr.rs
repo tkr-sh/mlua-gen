@@ -2,14 +2,14 @@ use {
     quote::ToTokens,
     std::collections::VecDeque,
     syn::{
-        meta::ParseNestedMeta,
-        spanned::Spanned,
         ExprArray,
         Fields,
         Ident,
         Token,
         UnOp,
         Visibility,
+        meta::ParseNestedMeta,
+        spanned::Spanned,
     },
 };
 
@@ -33,7 +33,7 @@ pub(crate) struct MethodOrFunction {
 }
 
 impl Attributes {
-    pub fn parse(&mut self, meta: ParseNestedMeta) -> syn::Result<()> {
+    pub fn parse(&mut self, meta: &ParseNestedMeta) -> syn::Result<()> {
         if let Some(ident) = meta.path.get_ident() {
             match ident.to_string().as_str() {
                 "get" => {
@@ -57,7 +57,10 @@ impl Attributes {
                                     .filter_map(|exp| {
                                         match exp {
                                             syn::Expr::Path(ident) => {
-                                                Some(exprpath_to_string(ident))
+                                                Some(
+                                                    exprpath_to_string(&ident)
+                                                        .expect("Invalid indent"),
+                                                )
                                             },
                                             syn::Expr::Reference(ident) => {
                                                 Some(ident.into_token_stream().to_string())
@@ -68,21 +71,15 @@ impl Attributes {
                                     .collect::<VecDeque<_>>();
 
                                 let first_arg = args.front();
-                                let first_arg = first_arg.map(|s| s.as_str());
+                                let first_arg = first_arg.map(std::string::String::as_str);
                                 let is_self = matches!(
                                     &first_arg,
-                                    Some("& mut self") |
-                                        Some("mut self") |
-                                        Some("& self") |
-                                        Some("self")
+                                    Some("& mut self" | "mut self" | "& self" | "self")
                                 );
 
                                 vec_elements.push(MethodOrFunction {
-                                    name: exprpath_to_string(ident),
-                                    is_mut: matches!(
-                                        &first_arg,
-                                        Some("& mut self") | Some("mut self")
-                                    ),
+                                    name: exprpath_to_string(&ident)?,
+                                    is_mut: matches!(&first_arg, Some("& mut self" | "mut self")),
                                     // Unused for now
                                     // is_ref: matches!(
                                     //     &first_arg,
@@ -133,24 +130,26 @@ pub(crate) enum FieldsVisibility {
     Custom(Vec<String>),
 }
 
-impl From<&Visibility> for FieldsVisibility {
-    fn from(value: &Visibility) -> Self {
-        match value {
+impl TryFrom<&Visibility> for FieldsVisibility {
+    type Error = syn::Error;
+
+    fn try_from(value: &Visibility) -> Result<Self, Self::Error> {
+        Ok(match value {
             Visibility::Public(_) => FieldsVisibility::Pub,
             Visibility::Restricted(paren) => {
                 match paren.paren_token.span.join().source_text().as_deref() {
                     Some("(crate)") => FieldsVisibility::PubCrate,
                     Some("(super)") => FieldsVisibility::PubSuper,
-                    _ => panic!("Unexpected visibility"),
+                    _ => return Err(syn::Error::new(value.span(), "Unexpected visibility")),
                 }
             },
             Visibility::Inherited => FieldsVisibility::None,
-        }
+        })
     }
 }
 
 impl FieldsVisibility {
-    fn parse(meta: ParseNestedMeta) -> syn::Result<Self> {
+    fn parse(meta: &ParseNestedMeta) -> syn::Result<Self> {
         // `=` parsing
         meta.value()?;
 
@@ -165,7 +164,7 @@ impl FieldsVisibility {
         // Check for `pub`
         if meta.input.peek(Token![pub]) {
             if let Ok(visibility) = meta.input.parse::<Visibility>() {
-                return Ok((&visibility).into());
+                return (&visibility).try_into();
             }
         }
 
@@ -176,7 +175,7 @@ impl FieldsVisibility {
             let mut vec_elements = vec![];
             for elem in arr.elems {
                 if let syn::Expr::Path(ident) = elem {
-                    vec_elements.push(exprpath_to_string(ident));
+                    vec_elements.push(exprpath_to_string(&ident)?);
                 } else {
                     return Err(meta.error("Expected an identifier"));
                 }
@@ -195,17 +194,20 @@ impl FieldsVisibility {
                     .filter(|field| {
                         match self {
                             FieldsVisibility::Pub => {
-                                matches!((&field.vis).into(), FieldsVisibility::Pub)
+                                matches!(
+                                    (&field.vis).try_into().expect("Is Pub"),
+                                    FieldsVisibility::Pub
+                                )
                             },
                             FieldsVisibility::PubCrate => {
                                 matches!(
-                                    (&field.vis).into(),
+                                    (&field.vis).try_into().expect("Is PubCrate"),
                                     FieldsVisibility::Pub | FieldsVisibility::PubCrate
                                 )
                             },
                             FieldsVisibility::PubSuper => {
                                 matches!(
-                                    (&field.vis).into(),
+                                    (&field.vis).try_into().expect("Is PubSuper"),
                                     FieldsVisibility::Pub |
                                         FieldsVisibility::PubCrate |
                                         FieldsVisibility::PubSuper
@@ -246,17 +248,20 @@ impl FieldsVisibility {
                     .filter(|(idx, field)| {
                         match self {
                             FieldsVisibility::Pub => {
-                                matches!((&field.vis).into(), FieldsVisibility::Pub)
+                                matches!(
+                                    (&field.vis).try_into().expect("Is Pub"),
+                                    FieldsVisibility::Pub
+                                )
                             },
                             FieldsVisibility::PubCrate => {
                                 matches!(
-                                    (&field.vis).into(),
+                                    (&field.vis).try_into().expect("Is PubCrate"),
                                     FieldsVisibility::Pub | FieldsVisibility::PubCrate
                                 )
                             },
                             FieldsVisibility::PubSuper => {
                                 matches!(
-                                    (&field.vis).into(),
+                                    (&field.vis).try_into().expect("Is PubSuper"),
                                     FieldsVisibility::Pub |
                                         FieldsVisibility::PubCrate |
                                         FieldsVisibility::PubSuper
@@ -278,10 +283,11 @@ impl FieldsVisibility {
     }
 }
 
-fn exprpath_to_string(exprpath: syn::ExprPath) -> String {
-    exprpath
-        .path
-        .span()
-        .source_text()
-        .expect("Should be a valid ident")
+fn exprpath_to_string(exprpath: &syn::ExprPath) -> syn::Result<String> {
+    exprpath.path.span().source_text().ok_or_else(|| {
+        syn::Error::new(
+            exprpath.span(),
+            format!("Expected {exprpath:?} to have a valid `source_text`"),
+        )
+    })
 }

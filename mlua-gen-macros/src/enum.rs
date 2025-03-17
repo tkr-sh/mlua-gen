@@ -5,7 +5,8 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{quote, ToTokens},
+    quote::{ToTokens, quote},
+    std::iter::repeat_with,
     syn::{DataEnum, Generics, Ident, Variant},
 };
 
@@ -23,13 +24,13 @@ pub fn builder(
             let var_name = &v.ident;
             (
                 var_name,
-                builder_for_fields(quote! {Self::#var_name}, &v.fields),
+                builder_for_fields(&quote! {Self::#var_name}, &v.fields),
             )
         })
         .unzip();
     let no_ty_generics = remove_ty_from_generics(generics);
 
-    let builder_fn_code = builder_for_functions(quote! {Self}, functions);
+    let builder_fn_code = builder_for_functions(&quote! {Self}, functions);
 
     quote! {
         impl #generics ::mlua_gen::LuaBuilder<
@@ -176,14 +177,15 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
                     let indexed = (1..=field_unnamed.unnamed.len()).map(|i| quote!(value.get(#i)?));
 
                     // For impl from lua
-                    let impl_from_lua = (0..field_unnamed.unnamed.len()).map(|_| {
+                    let impl_from_lua = repeat_with(|| {
                         quote!(::mlua::FromLua::from_lua(
                             sequence_value.next().ok_or_else(|| {
                                 ::mlua::Error::runtime("Not enough values in sequence table.")
                             })??,
                             lua,
                         )?)
-                    });
+                    })
+                    .take(field_unnamed.unnamed.len());
 
                     (
                         quote!(

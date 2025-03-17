@@ -16,5 +16,5 @@ pub fn test() {
 
     lua.load(include_str!("./generic_struct.lua"))
         .exec()
-        .unwrap()
+        .unwrap();
 }
