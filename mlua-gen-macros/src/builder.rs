@@ -110,8 +110,11 @@ pub fn generate_tuple_access<'l, I: Iterator<Item = &'l Field>>(
                 .enumerate()
                 .map(process_values)
                 .unzip();
-            let (remaining_args_ident, remaining_tys): (Vec<_>, Vec<_>) =
-                fields_unnamed.enumerate().map(process_values).unzip();
+            let (remaining_args_ident, remaining_tys): (Vec<_>, Vec<_>) = fields_unnamed
+                .enumerate()
+                .map(|(idx, value)| (idx + 2, value))
+                .map(process_values)
+                .unzip();
 
             args_ident.extend(remaining_args_ident);
             tys.extend(remaining_tys);
