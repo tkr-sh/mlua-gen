@@ -244,7 +244,10 @@ pub(crate) fn user_data(
                     ::mlua::Value::Table(table) => {
                         Ok(#struct_constructor)
                     },
-                    val => Err(::mlua::Error::runtime(format!("Expected a table. Got: {val:?}"))),
+                    ::mlua::Value::UserData(user_data) => {
+                        user_data.take()
+                    },
+                    val => Err(::mlua::Error::runtime(format!("Expected a table or a UserData. Got: {val:?}"))),
                 }
             }
         }

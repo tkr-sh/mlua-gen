@@ -281,7 +281,10 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
                         #(#impl_from_lua_match)*
                         Err(::mlua::Error::runtime("No valid variant found."))
                     },
-                    val => Err(::mlua::Error::runtime(format!("Expected a table. Got: {val:?}"))),
+                    ::mlua::Value::UserData(user_data) => {
+                        user_data.take()
+                    },
+                    val => Err(::mlua::Error::runtime(format!("Expected a table or a UserData. Got: {val:?}"))),
                 }
             }
         }
