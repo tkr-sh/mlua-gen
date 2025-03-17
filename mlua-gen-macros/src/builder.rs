@@ -50,29 +50,51 @@ pub(crate) fn builder_for_functions(
     }
 }
 
-pub(crate) fn builder_for_fields(name: &TokenStream2, fields: &Fields) -> TokenStream2 {
+pub(crate) fn builder_for_fields(
+    name: &TokenStream2,
+    fields: &Fields,
+    is_function_wrap: bool,
+) -> TokenStream2 {
     match fields {
         Fields::Unit => quote! { Ok::<_, ::mlua::Error>(#name) },
-        Fields::Unnamed(unnamed) => builder_for_unnamed(name, unnamed),
-        Fields::Named(named) => builder_for_named(name, named),
+        Fields::Unnamed(unnamed) => builder_for_unnamed(name, unnamed, is_function_wrap),
+        Fields::Named(named) => builder_for_named(name, named, is_function_wrap),
     }
 }
 
-fn builder_for_unnamed(name: &TokenStream2, fields: &FieldsUnnamed) -> TokenStream2 {
+fn builder_for_unnamed(
+    name: &TokenStream2,
+    fields: &FieldsUnnamed,
+    is_function_wrap: bool,
+) -> TokenStream2 {
     let (access, tys) = generate_tuple_access(fields.unnamed.iter());
+    let (first_arg, function_creation) = if is_function_wrap {
+        (quote!(_: ::mlua::Table), quote!(::mlua::Function::wrap))
+    } else {
+        (quote!(_), quote!(lua.create_function))
+    };
 
     quote! {
-        lua.create_function(|_, args: #tys| {
+        #function_creation(|#first_arg, args: #tys| {
             Ok(#name (#access))
         })
     }
 }
 
-fn builder_for_named(name: &TokenStream2, fields: &FieldsNamed) -> TokenStream2 {
+fn builder_for_named(
+    name: &TokenStream2,
+    fields: &FieldsNamed,
+    is_function_wrap: bool,
+) -> TokenStream2 {
     let names = fields.named.iter().map(|x| &x.ident);
+    let (first_arg, function_creation) = if is_function_wrap {
+        (quote!(_: ::mlua::Table), quote!(::mlua::Function::wrap))
+    } else {
+        (quote!(_), quote!(lua.create_function))
+    };
 
     quote! {
-        lua.create_function(|_, data: ::mlua::Table| {
+        #function_creation(|#first_arg, data: ::mlua::Table| {
             Ok(#name {
                 #( #names: data.get(stringify!(#names))?, )*
             })

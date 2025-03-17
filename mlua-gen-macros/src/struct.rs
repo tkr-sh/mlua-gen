@@ -17,7 +17,23 @@ pub fn builder(
     functions: Vec<&MethodOrFunction>,
     generics: &Generics,
 ) -> TokenStream2 {
-    let builder_code = builder_for_fields(&quote! {Self}, &ds.fields);
+    let init_builder_code = builder_for_fields(&quote! {Self}, &ds.fields, false);
+    let maybe_set_metatable = if ds.fields == Fields::Unit {
+        quote!()
+    } else {
+        let function_wrap_builder_code = builder_for_fields(&quote! {Self}, &ds.fields, true);
+
+        quote! {
+            table.set_metatable(Some({
+                let metatable = lua.create_table()?;
+                metatable.set(
+                    "__call",
+                    #function_wrap_builder_code,
+                )?;
+                metatable
+            }));
+        }
+    };
     let builder_fn_code = builder_for_functions(&quote! {Self}, functions);
     let no_ty_generics = remove_ty_from_generics(generics);
 
@@ -37,8 +53,6 @@ pub fn builder(
         Fields::Unnamed(..) | Fields::Named(..) => quote!(::mlua::Function),
     };
 
-    let table_fn_name = format!("{name}_");
-
     quote! {
         impl #generics ::mlua_gen::LuaBuilder<
             #return_type,
@@ -47,7 +61,7 @@ pub fn builder(
             ::mlua::Table,
         > for #name #no_ty_generics {
             fn lua_builder(lua: &::mlua::Lua) -> ::mlua::Result<#return_type> {
-                #builder_code
+                #init_builder_code
             }
 
             fn lua_fn_builder(lua: &::mlua::Lua) -> ::mlua::Result<Option<::mlua::Table>> {
@@ -59,11 +73,16 @@ pub fn builder(
             }
 
             fn to_globals_as<S: AsRef<str>>(lua: &::mlua::Lua, s: S) -> ::mlua::Result<()> {
-                lua.globals()
-                    .set(s.as_ref(), Self::lua_builder(&lua)?)?;
-
+                // When there are no function constructors (`new`, `default`, etc.), we can just
+                // put it as a basic `function` (Cf. `else` block). But when it's not, we need to
+                // create a metatable just for that.
                 if let Some(table) = Self::lua_fn_builder(&lua)? {
-                    lua.globals().set(#table_fn_name, table)?;
+                    #maybe_set_metatable
+
+                    lua.globals().set(s.as_ref(), table)?;
+                } else {
+                    lua.globals()
+                        .set(s.as_ref(), Self::lua_builder(&lua)?)?;
                 }
 
                 Ok(())
@@ -135,7 +154,7 @@ pub(crate) fn user_data(
                                 this.#field_ident = v;
                                 Ok(())
                             }
-                    );
+                        );
                 )
             })
             .collect::<Vec<TokenStream2>>(),

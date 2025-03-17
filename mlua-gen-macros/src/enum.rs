@@ -24,7 +24,7 @@ pub fn builder(
             let var_name = &v.ident;
             (
                 var_name,
-                builder_for_fields(&quote! {Self::#var_name}, &v.fields),
+                builder_for_fields(&quote! {Self::#var_name}, &v.fields, false),
             )
         })
         .unzip();
