@@ -86,14 +86,25 @@ name = "mlua-gen"
 version = "0.2.1"
 dependencies = [
  "mlua",
- "mlua-gen-macros",
+ "mlua-gen-macros 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "mlua-gen-macros"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "mlua",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "mlua-gen-macros"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c813f5db5c9d2a3ca67e081be813b257c79f299c381b561ccff54b60312adad"
+dependencies = [
  "proc-macro2",
  "quote",
  "syn",
