@@ -102,62 +102,123 @@ pub(crate) fn user_data(
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream2 {
-    fn field_accessory_name_and_ident(field: String) -> (TokenStream2, String) {
-        let is_int = field.chars().all(|c| c.is_ascii_digit());
-        (
-            if is_int {
-                syn::LitInt::new(&field, Span::call_site()).into_token_stream()
-            } else {
-                syn::Ident::new(&field, Span::call_site()).into_token_stream()
-            },
-            if is_int {
-                format!(
-                    "i{}",
-                    field.parse::<usize>().expect(
-                        "Already checked that is valid int,\
-                                and a tuple shouldn't has usize::MAX fields"
-                    ) + 1
-                )
-            } else {
-                field
-            },
-        )
-    }
+    // Is either a:
+    // - When `all_fields` is Named: `Vec` of `.add_method_field_get(...)`
+    // - When `all_fields` is Unnamed: `Vec` of `match` arms for __index
+    // - When `all_fields` is Unit: `Vec::new`
+    let (field_get_named, field_get_unnamed) = match all_fields {
+        Fields::Named(_) => {
+            (
+                get_fields
+                    .into_iter()
+                    .map(|field| {
+                        let field_ident =
+                            syn::Ident::new(&field, Span::call_site()).into_token_stream();
+                        quote!(
+                            reserved_fields
+                                .add_field_method_get(
+                                    #field,
+                                    |_, this| Ok(this.#field_ident.clone())
+                                );
+                        )
+                    })
+                    .collect::<Vec<TokenStream2>>(),
+                Vec::new(),
+            )
+        },
+        Fields::Unnamed(_) => {
+            (
+                Vec::new(),
+                get_fields
+                    .into_iter()
+                    .map(|field| {
+                        // Since it's an unnamed struct, it should be a usize
+                        let field_int =
+                            syn::LitInt::new(&field, Span::call_site()).into_token_stream();
+                        quote!(
+                            #field_int => this.#field_int.clone().into_lua(&lua)?,
+                        )
+                    })
+                    .collect::<Vec<TokenStream2>>(),
+            )
+        },
+        Fields::Unit => (Vec::new(), Vec::new()),
+    };
 
-    let non_typed_generics = remove_ty_from_generics(generics);
+    // Is either a:
+    // - When `all_fields` is Named: `Vec` of `.add_method_field_set(...)`
+    // - When `all_fields` is Unnamed: `Vec` of `match` arms for __newindex
+    // - When `all_fields` is Unit: `Vec::new`
+    let (field_set_named, field_set_unnamed) = match all_fields {
+        Fields::Named(_) => {
+            (
+                set_fields
+                    .into_iter()
+                    .map(|field| {
+                        let field_ident =
+                            syn::Ident::new(&field, Span::call_site()).into_token_stream();
+
+                        quote!(
+                            reserved_fields
+                                .add_field_method_set(
+                                    #field,
+                                    |_, this, v| {
+                                        this.#field_ident = v;
+                                        Ok(())
+                                    }
+                                );
+                        )
+                    })
+                    .collect::<Vec<TokenStream2>>(),
+                Vec::new(),
+            )
+        },
+        Fields::Unnamed(_) => {
+            (
+                Vec::new(),
+                set_fields
+                    .into_iter()
+                    .map(|field| {
+                        // Since it's an unnamed struct, it should be a usize
+                        let field_int =
+                            syn::LitInt::new(&field, Span::call_site()).into_token_stream();
+                        quote!(
+                            #field_int => this.#field_int = mlua::FromLua::from_lua(v, &lua)?,
+                        )
+                    })
+                    .collect::<Vec<TokenStream2>>(),
+            )
+        },
+        Fields::Unit => (Vec::new(), Vec::new()),
+    };
+
+    let meta_index = if let Fields::Unnamed(_) = all_fields {
+        quote!(
+            method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
+                use ::mlua::IntoLua;
+                Ok(match index - 1 {
+                    #(#field_get_unnamed)*
+                    _ => return Err::<::mlua::Value, _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
+                })
+            });
+
+            method_or_fns.add_meta_method_mut("__newindex", |lua, this: &mut Self, (index, v): (usize, ::mlua::Value)| {
+                match index - 1 {
+                    #(#field_set_unnamed)*
+                    _ => return Err::<(), _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
+                }
+
+                Ok(())
+            });
+        )
+    } else {
+        quote!()
+    };
+
+
 
     // Field
-    let (field_get, field_set, field_extra, struct_constructor) = (
-        get_fields
-            .into_iter()
-            .map(|field| {
-                let (field_ident, field_accessory_name) = field_accessory_name_and_ident(field);
-                quote!(
-                    reserved_fields
-                        .add_field_method_get(
-                            #field_accessory_name,
-                            |_, this| Ok(this.#field_ident.clone())
-                        );
-                )
-            })
-            .collect::<Vec<TokenStream2>>(),
-        set_fields
-            .into_iter()
-            .map(|field| {
-                let (field_ident, field_accessory_name) = field_accessory_name_and_ident(field);
-
-                quote!(
-                    reserved_fields
-                        .add_field_method_set(
-                            #field_accessory_name,
-                            |_, this, v| {
-                                this.#field_ident = v;
-                                Ok(())
-                            }
-                        );
-                )
-            })
-            .collect::<Vec<TokenStream2>>(),
+    let (field_extra, struct_constructor) = (
         if let Some(field) = custom_field {
             quote! {#field(reserved_fields)}
         } else {
@@ -205,6 +266,8 @@ pub(crate) fn user_data(
             Fields::Unit => quote!(Self),
         },
     );
+
+
 
     let (method_or_fns, method_or_fn_extra) = (
         impls
@@ -256,6 +319,10 @@ pub(crate) fn user_data(
         },
     );
 
+
+
+    let non_typed_generics = remove_ty_from_generics(generics);
+
     quote! {
         impl #generics ::mlua::FromLua for #name #non_typed_generics {
             fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name #non_typed_generics> {
@@ -273,12 +340,13 @@ pub(crate) fn user_data(
 
         impl #generics ::mlua::UserData for #name #non_typed_generics {
             fn add_fields<MluaUserDataFields: ::mlua::UserDataFields<Self>>(reserved_fields: &mut MluaUserDataFields) {
-                #(#field_get)*
-                #(#field_set)*
+                #(#field_get_named)*
+                #(#field_set_named)*
                 #field_extra
             }
 
             fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut MluaUserDataMethods) {
+                #meta_index
                 #(#method_or_fns)*
                 #method_or_fn_extra
             }

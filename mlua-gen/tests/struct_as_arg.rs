@@ -17,6 +17,7 @@ pub fn test() -> mlua::Result<()> {
     #[derive(Debug, Clone, Copy)]
     pub struct Quantity(usize);
 
+
     let lua = mlua::Lua::new();
 
     Quantity::to_globals(&lua)?;

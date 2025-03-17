@@ -1,4 +1,4 @@
-use mlua_gen::{mlua_gen, LuaBuilder};
+use mlua_gen::{LuaBuilder, mlua_gen};
 
 #[test]
 pub fn test() {

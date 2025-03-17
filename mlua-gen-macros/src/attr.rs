@@ -57,18 +57,15 @@ impl Attributes {
                                     .filter_map(|exp| {
                                         match exp {
                                             syn::Expr::Path(ident) => {
-                                                Some(
-                                                    exprpath_to_string(&ident)
-                                                        .expect("Invalid indent"),
-                                                )
+                                                Some(exprpath_to_string(&ident))
                                             },
                                             syn::Expr::Reference(ident) => {
-                                                Some(ident.into_token_stream().to_string())
+                                                Some(Ok(ident.into_token_stream().to_string()))
                                             },
                                             _ => None,
                                         }
                                     })
-                                    .collect::<VecDeque<_>>();
+                                    .collect::<syn::Result<VecDeque<_>>>()?;
 
                                 let first_arg = args.front();
                                 let first_arg = first_arg.map(std::string::String::as_str);
