@@ -18,3 +18,7 @@
 
 [lints]
     workspace = true
+
+[dev-dependencies.mlua]
+    features = ["userdata-wrappers"]
+    workspace = true

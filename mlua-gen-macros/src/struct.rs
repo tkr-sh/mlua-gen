@@ -192,7 +192,7 @@ pub(crate) fn user_data(
         Fields::Unit => (Vec::new(), Vec::new()),
     };
 
-    let meta_index = if let Fields::Unnamed(_) = all_fields {
+    let meta_index = if matches!(all_fields, Fields::Unnamed(_)) {
         quote!(
             method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
                 use ::mlua::IntoLua;

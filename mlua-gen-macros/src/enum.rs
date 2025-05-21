@@ -81,8 +81,6 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
     custom_field: Option<syn::Ident>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> proc_macro2::TokenStream {
-    let non_typed_generics = remove_ty_from_generics(generics);
-
     // Create the fields to access a value.
     let (impl_from_lua_match, fields): (Vec<_>, Vec<_>) = variants
         .map(|variant| {
@@ -272,6 +270,9 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
     } else {
         quote!()
     };
+
+
+    let non_typed_generics = remove_ty_from_generics(generics);
 
     quote! {
         impl #generics ::mlua::FromLua for #name #non_typed_generics{

@@ -3,8 +3,8 @@
     resolver = "3"
 
     [workspace.dependencies]
-        mlua = { version = "0.10", features = ["lua54"] }
-        mlua-gen-macros = { version = "0.2.2" }
+        mlua = { version = "0.10", features = ["lua54"], path = "../mlua/" }
+        mlua-gen-macros = { path = "./mlua-gen-macros/" }
         proc-macro2 = "1.0"
         quote = "1.0"
         syn = { version = "2.0", features = ["extra-traits", "full"] }
