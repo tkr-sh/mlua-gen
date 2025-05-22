@@ -88,6 +88,8 @@ pub fn builder(
                 Ok(())
             }
         }
+
+        impl #generics ::mlua_gen::AutomaticImplWhenMluaGen for #name #no_ty_generics { }
     }
 }
 

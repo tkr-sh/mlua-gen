@@ -1,30 +1,11 @@
-#![feature(specialization)]
 use {
     mlua::{AnyUserData, FromLua, Function, IntoLua, Lua, Table, UserData, Value},
-    mlua_gen::{LuaBuilder, mlua_gen},
+    mlua_gen::{IsIndexable, IsMluaGenerated, LuaBuilder, mlua_gen},
     std::{
         ops::Index,
         sync::{Arc, Mutex},
     },
 };
-
-trait IsIndexable {
-    fn is_indexable(&self) -> bool {
-        false
-    }
-}
-
-impl<T> IsIndexable for T {
-    default fn is_indexable(&self) -> bool {
-        false
-    }
-}
-
-impl<T: Index<usize>> IsIndexable for T {
-    fn is_indexable(&self) -> bool {
-        true
-    }
-}
 
 #[test]
 pub fn test() -> mlua::Result<()> {
@@ -34,9 +15,10 @@ pub fn test() -> mlua::Result<()> {
         other: OtherStruct,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
+    #[mlua_gen::mlua_gen]
     struct OtherStruct {
-        a: u8,
+        pub a: u8,
     }
 
     impl UserData for VecWrapper {
@@ -46,13 +28,7 @@ pub fn test() -> mlua::Result<()> {
                 let table = lua.create_table()?;
                 let this_clone = this.clone();
 
-                if this
-                    .borrow::<Arc<Mutex<Self>>>()?
-                    .lock()
-                    .unwrap()
-                    .vec
-                    .is_indexable()
-                {
+                if <Vec<u8> as IsIndexable>::IS_INDEXABLE {
                     let get = lua.create_function(move |_, (_, index): (Table, usize)| {
                         println!("{this:#?}");
                         let this = this.borrow::<Arc<Mutex<Self>>>()?;
@@ -68,6 +44,39 @@ pub fn test() -> mlua::Result<()> {
                             this.lock().unwrap().vec[index] = value;
                             Ok(())
                         })?;
+
+                    let mt = lua.create_table_from([("__index", get), ("__newindex", set)])?;
+                    table.set_metatable(Some(mt));
+                }
+
+                Ok(table)
+            });
+
+            fields.add_field_function_get("other", |lua: &Lua, this: AnyUserData| {
+                let table = lua.create_table()?;
+                let this_clone = this.clone();
+
+                if <OtherStruct as IsMluaGenerated>::IS_MLUA_GENERATED {
+                    let get = lua.create_function(move |_, (_, index): (Table, usize)| {
+                        println!("{this:#?}");
+                        let this = this.borrow::<Arc<Mutex<Self>>>()?;
+                        Ok(this.lock().unwrap().other.clone())
+                    })?;
+                    let set = lua.create_function(
+                        move |lua, (_, key, value): (Table, String, Value)| {
+                            println!("{this_clone:#?}");
+                            let mut this = this_clone.borrow_mut::<Arc<Mutex<Self>>>()?;
+                            let Value::UserData(uwu) = this.lock().unwrap().other.clone().into_lua(lua)? else {
+                                unreachable!("Conversion of types that come from mlua-gen should ALWAYS be converted to table")
+                            };
+
+                            use ::mlua::ObjectLike;
+                            uwu.set(key.clone(), value);
+
+                            this.lock().unwrap().other = FromLua::from_lua(Value::UserData(uwu), lua)?;
+                            Ok(())
+                        },
+                    )?;
 
                     let mt = lua.create_table_from([("__index", get), ("__newindex", set)])?;
                     table.set_metatable(Some(mt));
@@ -91,6 +100,10 @@ pub fn test() -> mlua::Result<()> {
     lua.load("vec_wrapper.vec[3] = 2").exec()?;
 
     assert_eq!(*vec_wrapper.lock().unwrap().vec.last().unwrap(), 2);
+
+    lua.load("vec_wrapper.other.a = 1").exec()?;
+
+    assert_eq!(vec_wrapper.lock().unwrap().other.a, 1);
 
     Ok(())
 }
