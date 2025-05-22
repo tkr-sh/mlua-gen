@@ -5,9 +5,9 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{ToTokens, quote},
-    std::iter::repeat_with,
-    syn::{DataStruct, Field, Fields, Generics, Ident, parse_str},
+    quote::{quote, ToTokens},
+    std::{collections::HashSet, iter::repeat_with},
+    syn::{parse_str, DataStruct, Field, Fields, Generics, Ident},
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for a struct
@@ -108,6 +108,52 @@ pub(crate) fn user_data(
     // - When `all_fields` is Named: `Vec` of `.add_method_field_get(...)`
     // - When `all_fields` is Unnamed: `Vec` of `match` arms for __index
     // - When `all_fields` is Unit: `Vec::new`
+    let fields_declaration = match all_fields {
+        Fields::Named(_) => {
+            let get_and_set_fields = get_fields.iter().chain(set_fields.iter()).collect::<HashSet<&String>>();
+            let fields_code = vec![];
+            
+            for get_and_set_field in get_and_set_fields {
+                let is_get = get_fields.contains(get_and_set_field);
+                let is_set = set_fields.contains(get_and_set_field);
+                let field = get_and_set_field;
+                let field_ident =
+                    syn::Ident::new(&field, Span::call_site()).into_token_stream();
+
+                let base_code = quote!(
+                    fields.add_field_function_get(#field, |lua: &Lua, this: AnyUserData| {
+                        let table = lua.create_table()?;
+                        let this_clone = this.clone();
+
+                        if <Vec<u8> as IsIndexable>::IS_INDEXABLE {
+                            let get = lua.create_function(move |_, (_, index): (Table, usize)| {
+                                let this = this.borrow::<Arc<Mutex<Self>>>()?;
+                                Ok(this.lock().unwrap().#field_ident.get(index).cloned())
+                            })?;
+
+                            let set =
+                                lua.create_function(move |_, (_, index, value): (Table, usize, _)| { // TODO: <-----
+                                    let mut this = this_clone.borrow_mut::<Arc<Mutex<Self>>>()?;
+                                    this.lock().unwrap().#field_ident[index] = value;
+                                    Ok(())
+                                })?;
+
+                            let mt = lua.create_table_from([("__index", get), ("__newindex", set)])?;
+                            table.set_metatable(Some(mt));
+                        }
+
+                        Ok(table)
+                    });
+
+                );
+
+                fields_code.push(base_code);
+            }
+        },
+        Fields::Unnamed(_) | Fields::Unit => todo!(),
+    };
+
+    }
     let (field_get_named, field_get_unnamed) = match all_fields {
         Fields::Named(_) => {
             (

@@ -3,7 +3,7 @@ use {
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
-    syn::{Data, DeriveInput, parse_macro_input},
+    syn::{parse_macro_input, Data, DeriveInput},
 };
 
 mod attr;
@@ -64,6 +64,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                     name,
                     generics,
                     &ds.fields,
+                    // GET TYPE AND IDENT
                     field_get,
                     field_set,
                     attributes.custom_fields,
