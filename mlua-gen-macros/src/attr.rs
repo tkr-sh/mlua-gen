@@ -1,15 +1,18 @@
 use {
+    crate::r#struct,
     quote::ToTokens,
     std::collections::VecDeque,
     syn::{
+        meta::ParseNestedMeta,
+        spanned::Spanned,
         ExprArray,
         Fields,
         Ident,
+        LitInt,
         Token,
+        Type,
         UnOp,
         Visibility,
-        meta::ParseNestedMeta,
-        spanned::Spanned,
     },
 };
 
@@ -182,7 +185,7 @@ impl FieldsVisibility {
         }
     }
 
-    pub(crate) fn fields_from_visibility(&self, fields: &Fields) -> syn::Result<Vec<String>> {
+    pub(crate) fn fields_from_visibility(&self, fields: &Fields) -> syn::Result<Vec<MinimalField>> {
         match fields {
             Fields::Named(fields_named) => {
                 Ok(fields_named
@@ -227,13 +230,20 @@ impl FieldsVisibility {
                             FieldsVisibility::None => false,
                         }
                     })
-                    .filter_map(|field| {
-                        field
-                            .ident
-                            .as_ref()
-                            .expect("Is named => has ident")
-                            .span()
-                            .source_text()
+                    .map(|field| {
+                        MinimalField {
+                            ty:           field.ty.clone(),
+                            ident:        IdentOrInt::Ident(
+                                field.ident.clone().expect("Is named => has ident"),
+                            ),
+                            ident_string: field
+                                .ident
+                                .as_ref()
+                                .expect("Is named => has ident")
+                                .span()
+                                .source_text()
+                                .expect("Field name should not be empty"),
+                        }
                     })
                     .collect())
             },
@@ -272,12 +282,34 @@ impl FieldsVisibility {
                             FieldsVisibility::None => false,
                         }
                     })
-                    .map(|(idx, _)| idx.to_string())
+                    .map(|(idx, field)| {
+                        MinimalField {
+                            ident_string: idx.to_string(),
+                            ident:        IdentOrInt::Int(syn::LitInt::new(
+                                &idx.to_string(),
+                                syn::Span::call_site(),
+                            )),
+                            ty:           field.ty.clone(),
+                        }
+                    })
                     .collect())
             },
             Fields::Unit => Ok(Vec::new()),
         }
     }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub struct MinimalField {
+    pub ident_string: String,
+    pub ident:        IdentOrInt,
+    pub ty:           Type,
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+enum IdentOrInt {
+    Ident(syn::Ident),
+    Int(syn::LitInt),
 }
 
 fn exprpath_to_string(exprpath: &syn::ExprPath) -> syn::Result<String> {

@@ -6,7 +6,7 @@ use {
     syn::{parse_macro_input, Data, DeriveInput},
 };
 
-mod attr;
+pub(crate) mod attr;
 pub(crate) mod builder;
 mod r#enum;
 mod shared;

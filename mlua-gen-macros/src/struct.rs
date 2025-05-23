@@ -1,6 +1,6 @@
 use {
     crate::{
-        attr::MethodOrFunction,
+        attr::{MethodOrFunction, MinimalField},
         builder::{builder_for_fields, builder_for_functions, generate_tuple_access},
         shared::remove_ty_from_generics,
     },
@@ -98,8 +98,8 @@ pub(crate) fn user_data(
     name: &Ident,
     generics: &Generics,
     all_fields: &Fields,
-    get_fields: Vec<String>,
-    set_fields: Vec<String>,
+    get_fields: Vec<MinimalField>,
+    set_fields: Vec<MinimalField>,
     custom_field: Option<syn::Ident>,
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
@@ -110,29 +110,33 @@ pub(crate) fn user_data(
     // - When `all_fields` is Unit: `Vec::new`
     let fields_declaration = match all_fields {
         Fields::Named(_) => {
-            let get_and_set_fields = get_fields.iter().chain(set_fields.iter()).collect::<HashSet<&String>>();
+            let get_and_set_fields = get_fields
+                .iter()
+                .chain(set_fields.iter())
+                .collect::<HashSet<&MinimalField>>();
             let fields_code = vec![];
-            
+
             for get_and_set_field in get_and_set_fields {
                 let is_get = get_fields.contains(get_and_set_field);
                 let is_set = set_fields.contains(get_and_set_field);
                 let field = get_and_set_field;
-                let field_ident =
-                    syn::Ident::new(&field, Span::call_site()).into_token_stream();
+                let field_ident = field.ident;
+                let field_as_string = field.ident_string;
+                let field_ty = field.ty;
 
                 let base_code = quote!(
-                    fields.add_field_function_get(#field, |lua: &Lua, this: AnyUserData| {
+                    fields.add_field_function_get(#field_as_string, |lua: &Lua, this: AnyUserData| {
                         let table = lua.create_table()?;
                         let this_clone = this.clone();
 
-                        if <Vec<u8> as IsIndexable>::IS_INDEXABLE {
+                        if <#field_ty as IsIndexable>::IS_INDEXABLE {
                             let get = lua.create_function(move |_, (_, index): (Table, usize)| {
                                 let this = this.borrow::<Arc<Mutex<Self>>>()?;
                                 Ok(this.lock().unwrap().#field_ident.get(index).cloned())
                             })?;
 
                             let set =
-                                lua.create_function(move |_, (_, index, value): (Table, usize, _)| { // TODO: <-----
+                                lua.create_function(move |_, (_, index, value): (Table, usize, #field_ty)| {
                                     let mut this = this_clone.borrow_mut::<Arc<Mutex<Self>>>()?;
                                     this.lock().unwrap().#field_ident[index] = value;
                                     Ok(())
@@ -153,7 +157,7 @@ pub(crate) fn user_data(
         Fields::Unnamed(_) | Fields::Unit => todo!(),
     };
 
-    }
+    // }
     let (field_get_named, field_get_unnamed) = match all_fields {
         Fields::Named(_) => {
             (
