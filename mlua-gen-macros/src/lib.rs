@@ -74,8 +74,8 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 Ok(quote!(#builder #user_data))
             })() {
-                // Ok(e) => dbg!(e),
-                Ok(e) => e,
+                Ok(e) => dbg!(e),
+                // Ok(e) => e,
                 Err(synerr) => return synerr.into_compile_error().into(),
             }
         },
@@ -97,7 +97,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                 attributes.custom_fields,
                 attributes.custom_impls,
             );
-            dbg!(quote!(#builder #user_data))
+            quote!(#builder #user_data)
         },
         Data::Union(_) => panic!("Must annotate struct or enum"),
     };

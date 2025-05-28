@@ -114,158 +114,223 @@ pub(crate) fn user_data(
                 .iter()
                 .chain(set_fields.iter())
                 .collect::<HashSet<&MinimalField>>();
-            let fields_code = vec![];
+            let mut fields_code = vec![];
 
             for get_and_set_field in get_and_set_fields {
                 let is_get = get_fields.contains(get_and_set_field);
                 let is_set = set_fields.contains(get_and_set_field);
                 let field = get_and_set_field;
-                let field_ident = field.ident;
-                let field_as_string = field.ident_string;
-                let field_ty = field.ty;
+                let field_ident = &field.ident;
+                let field_as_string = &field.ident_string;
+                let field_ty = &field.ty;
 
                 let base_code = quote!(
-                    fields.add_field_function_get(#field_as_string, |lua: &Lua, this: AnyUserData| {
+                    reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
                         let table = lua.create_table()?;
                         let this_clone = this.clone();
 
-                        if <#field_ty as IsIndexable>::IS_INDEXABLE {
-                            let get = lua.create_function(move |_, (_, index): (Table, usize)| {
-                                let this = this.borrow::<Arc<Mutex<Self>>>()?;
-                                Ok(this.lock().unwrap().#field_ident.get(index).cloned())
-                            })?;
+                        if <#field_ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED {
+                            let mut meta_table = vec![];
 
-                            let set =
-                                lua.create_function(move |_, (_, index, value): (Table, usize, #field_ty)| {
-                                    let mut this = this_clone.borrow_mut::<Arc<Mutex<Self>>>()?;
-                                    this.lock().unwrap().#field_ident[index] = value;
-                                    Ok(())
-                                })?;
+                            if #is_get {
+                                meta_table.push(
+                                    (
+                                        "__index",
+                                        lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                            let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                            Ok(this.lock().unwrap().#field_ident.clone())
+                                        })?
+                                    )
+                                );
+                            }
 
-                            let mt = lua.create_table_from([("__index", get), ("__newindex", set)])?;
+                            if #is_set {
+                                meta_table.push(
+                                    (
+                                        "__newindex",
+                                        lua.create_function(
+                                            move |lua, (_, key, value): (::mlua::Table, String, ::mlua::Value)| {
+                                                use ::mlua::IntoLua;
+                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                                let ::mlua::Value::UserData(data) = this.lock().unwrap().#field_ident.clone().into_lua(lua)? else {
+                                                    unreachable!("Conversion of types that come from mlua-gen should ALWAYS be converted to UserData")
+                                                };
+
+                                                use ::mlua::ObjectLike;
+                                                data.set(key.clone(), value);
+
+                                                this.lock().unwrap().#field_ident = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                                Ok(())
+                                            },
+                                        )?
+                                    )
+                                );
+                            }
+
+                            table.set_metatable(Some(lua.create_table_from(meta_table)?));
+                        } else if <#field_ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE {
+                            // TODO get/set checks
+                            //
+                            // TODO:
+                            // create a trait that depending on if it's indexable or not has a
+                            // different behaviour
+                            //meanwhlie:
+
+
+                            let meta_table = vec![
+                                (
+                                    "__index",
+                                    lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                        use mlua_gen::IsIndexable;
+                                        let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                        Ok(this.lock().unwrap().#field_ident.index_or_unreachable(index))
+                                    })?
+                                )
+                            ];
+
+                            if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
+                                meta_table.push(
+                                    (
+                                        "__newindex",
+                                        lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, #field_ty)| {
+                                            use ::mlua_gen::IsMutIndexable;
+                                            let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                            this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
+                                            Ok(())
+                                        })?
+                                    )
+                                );
+                            }
+
+                            let mt = lua.create_table_from(meta_table)?;
                             table.set_metatable(Some(mt));
                         }
 
+
                         Ok(table)
                     });
-
                 );
 
                 fields_code.push(base_code);
             }
+
+            fields_code
         },
-        Fields::Unnamed(_) | Fields::Unit => todo!(),
+        Fields::Unnamed(_) | Fields::Unit => {
+            // TODO:
+            vec![]
+        },
     };
+    //
+    // // }
+    // let (field_get_named, field_get_unnamed) = match all_fields {
+    //     Fields::Named(_) => {
+    //         (
+    //             get_fields
+    //                 .into_iter()
+    //                 .map(|field| {
+    //                     let field_ident = field.ident;
+    //                     let field_ident_string = field.ident_string;
+    //                     quote!(
+    //                         reserved_fields
+    //                             .add_field_method_get(
+    //                                 #field_ident_string,
+    //                                 |_, this| Ok(this.#field_ident.clone())
+    //                             );
+    //                     )
+    //                 })
+    //                 .collect::<Vec<TokenStream2>>(),
+    //             Vec::new(),
+    //         )
+    //     },
+    //     Fields::Unnamed(_) => {
+    //         (
+    //             Vec::new(),
+    //             get_fields
+    //                 .into_iter()
+    //                 .map(|field| {
+    //                     // Since it's an unnamed struct, it should be a usize
+    //                     let field_int = field.ident;
+    //                     quote!(
+    //                         #field_int => this.#field_int.clone().into_lua(&lua)?,
+    //                     )
+    //                 })
+    //                 .collect::<Vec<TokenStream2>>(),
+    //         )
+    //     },
+    //     Fields::Unit => (Vec::new(), Vec::new()),
+    // };
+    //
+    // // Is either a:
+    // // - When `all_fields` is Named: `Vec` of `.add_method_field_set(...)`
+    // // - When `all_fields` is Unnamed: `Vec` of `match` arms for __newindex
+    // // - When `all_fields` is Unit: `Vec::new`
+    // let (field_set_named, field_set_unnamed) = match all_fields {
+    //     Fields::Named(_) => {
+    //         (
+    //             set_fields
+    //                 .into_iter()
+    //                 .map(|field| {
+    //                     let field_ident = field.ident;
+    //                     let field_ident_string = field.ident_string;
+    //
+    //                     quote!(
+    //                         reserved_fields
+    //                             .add_field_method_set(
+    //                                 #field_ident_string,
+    //                                 |_, this, v| {
+    //                                     this.#field_ident = v;
+    //                                     Ok(())
+    //                                 }
+    //                             );
+    //                     )
+    //                 })
+    //                 .collect::<Vec<TokenStream2>>(),
+    //             Vec::new(),
+    //         )
+    //     },
+    //     Fields::Unnamed(_) => {
+    //         (
+    //             Vec::new(),
+    //             set_fields
+    //                 .into_iter()
+    //                 .map(|field| {
+    //                     // Since it's an unnamed struct, it should be a usize
+    //                     let field_int = field.ident;
+    //                     quote!(
+    //                         #field_int => this.#field_int = mlua::FromLua::from_lua(v, &lua)?,
+    //                     )
+    //                 })
+    //                 .collect::<Vec<TokenStream2>>(),
+    //         )
+    //     },
+    //     Fields::Unit => (Vec::new(), Vec::new()),
+    // };
 
-    // }
-    let (field_get_named, field_get_unnamed) = match all_fields {
-        Fields::Named(_) => {
-            (
-                get_fields
-                    .into_iter()
-                    .map(|field| {
-                        let field_ident =
-                            syn::Ident::new(&field, Span::call_site()).into_token_stream();
-                        quote!(
-                            reserved_fields
-                                .add_field_method_get(
-                                    #field,
-                                    |_, this| Ok(this.#field_ident.clone())
-                                );
-                        )
-                    })
-                    .collect::<Vec<TokenStream2>>(),
-                Vec::new(),
-            )
-        },
-        Fields::Unnamed(_) => {
-            (
-                Vec::new(),
-                get_fields
-                    .into_iter()
-                    .map(|field| {
-                        // Since it's an unnamed struct, it should be a usize
-                        let field_int =
-                            syn::LitInt::new(&field, Span::call_site()).into_token_stream();
-                        quote!(
-                            #field_int => this.#field_int.clone().into_lua(&lua)?,
-                        )
-                    })
-                    .collect::<Vec<TokenStream2>>(),
-            )
-        },
-        Fields::Unit => (Vec::new(), Vec::new()),
-    };
 
-    // Is either a:
-    // - When `all_fields` is Named: `Vec` of `.add_method_field_set(...)`
-    // - When `all_fields` is Unnamed: `Vec` of `match` arms for __newindex
-    // - When `all_fields` is Unit: `Vec::new`
-    let (field_set_named, field_set_unnamed) = match all_fields {
-        Fields::Named(_) => {
-            (
-                set_fields
-                    .into_iter()
-                    .map(|field| {
-                        let field_ident =
-                            syn::Ident::new(&field, Span::call_site()).into_token_stream();
 
-                        quote!(
-                            reserved_fields
-                                .add_field_method_set(
-                                    #field,
-                                    |_, this, v| {
-                                        this.#field_ident = v;
-                                        Ok(())
-                                    }
-                                );
-                        )
-                    })
-                    .collect::<Vec<TokenStream2>>(),
-                Vec::new(),
-            )
-        },
-        Fields::Unnamed(_) => {
-            (
-                Vec::new(),
-                set_fields
-                    .into_iter()
-                    .map(|field| {
-                        // Since it's an unnamed struct, it should be a usize
-                        let field_int =
-                            syn::LitInt::new(&field, Span::call_site()).into_token_stream();
-                        quote!(
-                            #field_int => this.#field_int = mlua::FromLua::from_lua(v, &lua)?,
-                        )
-                    })
-                    .collect::<Vec<TokenStream2>>(),
-            )
-        },
-        Fields::Unit => (Vec::new(), Vec::new()),
-    };
-
-    let meta_index = if matches!(all_fields, Fields::Unnamed(_)) {
-        quote!(
-            method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
-                use ::mlua::IntoLua;
-                Ok(match index - 1 {
-                    #(#field_get_unnamed)*
-                    _ => return Err::<::mlua::Value, _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
-                })
-            });
-
-            method_or_fns.add_meta_method_mut("__newindex", |lua, this: &mut Self, (index, v): (usize, ::mlua::Value)| {
-                match index - 1 {
-                    #(#field_set_unnamed)*
-                    _ => return Err::<(), _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
-                }
-
-                Ok(())
-            });
-        )
-    } else {
-        quote!()
-    };
+    // let meta_index = if matches!(all_fields, Fields::Unnamed(_)) {
+    //     quote!(
+    //         method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
+    //             use ::mlua::IntoLua;
+    //             Ok(match index - 1 {
+    //                 #(#field_get_unnamed)*
+    //                 _ => return Err::<::mlua::Value, _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
+    //             })
+    //         });
+    //
+    //         method_or_fns.add_meta_method_mut("__newindex", |lua, this: &mut Self, (index, v): (usize, ::mlua::Value)| {
+    //             match index - 1 {
+    //                 #(#field_set_unnamed)*
+    //                 _ => return Err::<(), _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
+    //             }
+    //
+    //             Ok(())
+    //         });
+    //     )
+    // } else {
+    //     quote!()
+    // };
 
 
 
@@ -392,13 +457,15 @@ pub(crate) fn user_data(
 
         impl #generics ::mlua::UserData for #name #non_typed_generics {
             fn add_fields<MluaUserDataFields: ::mlua::UserDataFields<Self>>(reserved_fields: &mut MluaUserDataFields) {
-                #(#field_get_named)*
-                #(#field_set_named)*
+                // #(#field_get_named)*
+                // #(#field_set_named)*
+                #(#fields_declaration)*
                 #field_extra
             }
 
             fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut MluaUserDataMethods) {
-                #meta_index
+                // TODO:
+                // #meta_index
                 #(#method_or_fns)*
                 #method_or_fn_extra
             }

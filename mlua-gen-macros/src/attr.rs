@@ -1,6 +1,6 @@
 use {
     crate::r#struct,
-    quote::ToTokens,
+    quote::{quote, ToTokens},
     std::collections::VecDeque,
     syn::{
         meta::ParseNestedMeta,
@@ -287,7 +287,7 @@ impl FieldsVisibility {
                             ident_string: idx.to_string(),
                             ident:        IdentOrInt::Int(syn::LitInt::new(
                                 &idx.to_string(),
-                                syn::Span::call_site(),
+                                proc_macro2::Span::call_site(),
                             )),
                             ty:           field.ty.clone(),
                         }
@@ -307,9 +307,18 @@ pub struct MinimalField {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-enum IdentOrInt {
+pub enum IdentOrInt {
     Ident(syn::Ident),
     Int(syn::LitInt),
+}
+
+impl ToTokens for IdentOrInt {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        tokens.extend(match self {
+            Self::Int(int) => quote!(#int),
+            Self::Ident(ident) => quote!(#ident),
+        });
+    }
 }
 
 fn exprpath_to_string(exprpath: &syn::ExprPath) -> syn::Result<String> {
