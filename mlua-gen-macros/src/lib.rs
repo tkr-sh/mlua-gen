@@ -19,19 +19,45 @@ macro_rules! dbg {
         match $val {
             tmp => {
                 #[cfg(feature = "debug")]
-                eprintln!(
-                    "[{}:{}:{}] {} = {}",
-                    std::file!(),
-                    std::line!(),
-                    std::column!(),
-                    std::stringify!($val),
-                    &tmp
-                );
+                std::fs::write(
+                    &format!("log/{}.rs", {
+                        use std::hash::{Hash, Hasher};
+                        let mut hasher = std::hash::DefaultHasher::new();
+                        tmp.to_string().hash(&mut hasher);
+                        hasher.finish()
+                    }),
+                    tmp.to_string().as_bytes(),
+                )
+                .unwrap();
+
+                println!("cache???");
+
                 tmp
             },
         }
     };
 }
+
+// macro_rules! dbg {
+//     ($val:expr $(,)?) => {
+//         // Use of `match` here is intentional because it affects the lifetimes
+//         // of temporaries - https://stackoverflow.com/a/48732525/1063961
+//         match $val {
+//             tmp => {
+//                 #[cfg(feature = "debug")]
+//                 eprintln!(
+//                     "[{}:{}:{}] {} = {}",
+//                     std::file!(),
+//                     std::line!(),
+//                     std::column!(),
+//                     std::stringify!($val),
+//                     &tmp
+//                 );
+//                 tmp
+//             },
+//         }
+//     };
+// }
 
 #[proc_macro_attribute]
 pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {

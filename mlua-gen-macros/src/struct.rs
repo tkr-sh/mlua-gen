@@ -104,10 +104,6 @@ pub(crate) fn user_data(
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
 ) -> TokenStream2 {
-    // Is either a:
-    // - When `all_fields` is Named: `Vec` of `.add_method_field_get(...)`
-    // - When `all_fields` is Unnamed: `Vec` of `match` arms for __index
-    // - When `all_fields` is Unit: `Vec::new`
     let fields_declaration = match all_fields {
         Fields::Named(_) => {
             let get_and_set_fields = get_fields
@@ -125,91 +121,122 @@ pub(crate) fn user_data(
                 let field_ty = &field.ty;
 
                 let base_code = quote!(
-                    reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
-                        let table = lua.create_table()?;
-                        let this_clone = this.clone();
+                    // TODO: based on trait const boolean either:
+                    //
+                    // - add_field_function_get
+                    // - add_field_method_get => for non indexable and into_lua
 
-                        if <#field_ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED {
-                            let mut meta_table = vec![];
+                    match (<#field_ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED, <#field_ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE) {
+                        (true, _) => {
+                            reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
+                                use ::mlua::IntoLua;
+                                let table = lua.create_table()?;
+                                let this_clone = this.clone();
+                                let mut meta_table = vec![];
 
-                            if #is_get {
-                                meta_table.push(
+                                if #is_get {
+                                    meta_table.push(
+                                        (
+                                            "__index",
+                                            lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                                let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                                Ok(this.lock().unwrap().#field_ident.clone())
+                                            })?
+                                        )
+                                    );
+                                }
+
+                                if #is_set {
+                                    meta_table.push(
+                                        (
+                                            "__newindex",
+                                            lua.create_function(
+                                                move |lua, (_, key, value): (::mlua::Table, String, ::mlua::Value)| {
+                                                    use ::mlua::IntoLua;
+                                                    let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                                    let ::mlua::Value::UserData(data) = this.lock().unwrap().#field_ident.clone().into_lua(lua)? else {
+                                                        unreachable!("Conversion of types that come from mlua-gen should ALWAYS be converted to UserData")
+                                                    };
+
+                                                    use ::mlua::ObjectLike;
+                                                    data.set(key.clone(), value)?;
+
+                                                    this.lock().unwrap().#field_ident = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                                    Ok(())
+                                                },
+                                            )?
+                                        )
+                                    );
+                                }
+
+                                table.set_metatable(Some(lua.create_table_from(meta_table)?));
+
+                                table.into_lua(lua)
+                            });
+                        }
+                        (false, true) => {
+                            reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
+                                use ::mlua::IntoLua;
+
+                                let table = lua.create_table()?;
+                                let this_clone = this.clone();
+                                // TODO get/set checks
+                                //meanwhlie:
+
+                                let mut meta_table = vec![
                                     (
                                         "__index",
                                         lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                            use mlua_gen::IsIndexable;
                                             let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                            Ok(this.lock().unwrap().#field_ident.clone())
+                                            Ok(this.lock().unwrap().#field_ident.index_or_unreachable(index - 1))
                                         })?
                                     )
-                                );
+                                ];
+
+                                if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
+                                    use ::mlua_gen::IsMutIndexable;
+                                    meta_table.push(
+                                        (
+                                            "__newindex",
+                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
+                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index - 1, value);
+                                                Ok(())
+                                            })?
+                                        )
+                                    );
+                                }
+
+                                let mt = lua.create_table_from(meta_table)?;
+                                table.set_metatable(Some(mt));
+                                table.into_lua(lua)
+
+                            });
+                        }
+                        (false, false) => {
+                            if #is_get {
+                                reserved_fields
+                                    .add_field_method_get(
+                                        #field_as_string,
+                                        |_, this| Ok(this.#field_ident.clone())
+                                    );
                             }
 
                             if #is_set {
-                                meta_table.push(
-                                    (
-                                        "__newindex",
-                                        lua.create_function(
-                                            move |lua, (_, key, value): (::mlua::Table, String, ::mlua::Value)| {
-                                                use ::mlua::IntoLua;
-                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                let ::mlua::Value::UserData(data) = this.lock().unwrap().#field_ident.clone().into_lua(lua)? else {
-                                                    unreachable!("Conversion of types that come from mlua-gen should ALWAYS be converted to UserData")
-                                                };
-
-                                                use ::mlua::ObjectLike;
-                                                data.set(key.clone(), value);
-
-                                                this.lock().unwrap().#field_ident = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
-                                                Ok(())
-                                            },
-                                        )?
-                                    )
-                                );
-                            }
-
-                            table.set_metatable(Some(lua.create_table_from(meta_table)?));
-                        } else if <#field_ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE {
-                            // TODO get/set checks
-                            //
-                            // TODO:
-                            // create a trait that depending on if it's indexable or not has a
-                            // different behaviour
-                            //meanwhlie:
-
-
-                            let meta_table = vec![
-                                (
-                                    "__index",
-                                    lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
-                                        use mlua_gen::IsIndexable;
-                                        let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                        Ok(this.lock().unwrap().#field_ident.index_or_unreachable(index))
-                                    })?
-                                )
-                            ];
-
-                            if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
-                                meta_table.push(
-                                    (
-                                        "__newindex",
-                                        lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, #field_ty)| {
-                                            use ::mlua_gen::IsMutIndexable;
-                                            let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                            this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
+                                reserved_fields
+                                    .add_field_method_set(
+                                        #field_as_string,
+                                        |_, this, v| {
+                                            this.#field_ident = v;
                                             Ok(())
-                                        })?
-                                    )
-                                );
+                                        }
+                                    );
                             }
-
-                            let mt = lua.create_table_from(meta_table)?;
-                            table.set_metatable(Some(mt));
                         }
-
-
-                        Ok(table)
-                    });
+                    }
                 );
+
 
                 fields_code.push(base_code);
             }

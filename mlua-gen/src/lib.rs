@@ -72,6 +72,7 @@ impl<T> IsIndexable for T {
     }
 }
 
+/// TODO: handle more indexable data types in std
 impl<T: Index<usize>> IsIndexable for T
 where
     <T as Index<usize>>::Output: Sized + 'static + Clone + mlua::IntoLua,
@@ -88,7 +89,7 @@ where
 
 // Same but with [`IndexMut`]
 pub trait IsMutIndexable {
-    type IndexType;
+    type IndexType: FromLua;
 
     const IS_MUT_INDEXABLE: bool = false;
 
@@ -100,7 +101,7 @@ pub trait IsMutIndexable {
 
 impl<T> IsMutIndexable for T {
     // dummy type
-    default type IndexType = T;
+    default type IndexType = u8;
 
     default const IS_MUT_INDEXABLE: bool = false;
 
@@ -111,7 +112,7 @@ impl<T> IsMutIndexable for T {
 
 impl<T: IndexMut<usize>> IsMutIndexable for T
 where
-    <T as Index<usize>>::Output: Sized + 'static + Clone + mlua::IntoLua,
+    <T as Index<usize>>::Output: Sized + 'static + Clone + mlua::IntoLua + mlua::FromLua,
 {
     type IndexType = <T as Index<usize>>::Output;
 
@@ -152,3 +153,5 @@ macro_rules! to_lua {
         $($struct_or_enum::to_globals(&$lua)?);*
     };
 }
+
+// TODO: create a macro `lua_wrapper!()` that creates a wrapper around an external type and `#[mlua_gen]` on it

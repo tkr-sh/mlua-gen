@@ -1,4 +1,5 @@
 local test = Test({ name = "name", int = 32 })
+print(test.new().name)
 assert(test.new().name == "new")
 assert(test.name == "name")
 assert(test.int == 32)
