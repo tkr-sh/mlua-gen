@@ -194,14 +194,14 @@ pub(crate) fn user_data(
                                     )
                                 ];
 
-                                if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
-                                    use ::mlua_gen::IsMutIndexable;
+                                if <#field_ty as ::mlua_gen::IsNewIndexable>::IS_NEW_INDEXABLE {
+                                    use ::mlua_gen::IsNewIndexable;
                                     meta_table.push(
                                         (
                                             "__newindex",
-                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
+                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, <#field_ty as IsNewIndexable>::Key, <#field_ty as IsNewIndexable>::Item )| {
                                                 let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index - 1, value);
+                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
                                                 Ok(())
                                             })?
                                         )
@@ -491,8 +491,6 @@ pub(crate) fn user_data(
             }
 
             fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut MluaUserDataMethods) {
-                // TODO:
-                // #meta_index
                 #(#method_or_fns)*
                 #method_or_fn_extra
             }

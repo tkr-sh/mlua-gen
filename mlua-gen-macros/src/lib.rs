@@ -3,6 +3,7 @@ use {
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
+    std::collections::HashMap,
     syn::{parse_macro_input, Data, DeriveInput},
 };
 
