@@ -207,6 +207,21 @@ pub(crate) fn user_data(
                                         )
                                     );
                                 }
+                                // If it doesn't impelemnt [`NewIndex`] but only [`IndexMut`],
+                                // still implement it
+                                else if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
+                                    use ::mlua_gen::IsMutIndexable;
+                                    meta_table.push(
+                                        (
+                                            "__newindex",
+                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
+                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
+                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
+                                                Ok(())
+                                            })?
+                                        )
+                                    );
+                                }
 
                                 let mt = lua.create_table_from(meta_table)?;
                                 table.set_metatable(Some(mt));
