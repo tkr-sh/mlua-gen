@@ -4,7 +4,7 @@ use {
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
     std::collections::HashMap,
-    syn::{parse_macro_input, Data, DeriveInput},
+    syn::{Data, DeriveInput, parse_macro_input},
 };
 
 pub(crate) mod attr;
@@ -97,6 +97,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                     attributes.custom_fields,
                     attributes.r#impl,
                     attributes.custom_impls,
+                    attributes.on_set,
                 );
 
                 Ok(quote!(#builder #user_data))
@@ -123,6 +124,7 @@ pub fn mlua_gen(args: TokenStream, input: TokenStream) -> TokenStream {
                 de.variants.iter(),
                 attributes.custom_fields,
                 attributes.custom_impls,
+                attributes.on_set,
             );
             quote!(#builder #user_data)
         },

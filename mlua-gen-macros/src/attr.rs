@@ -9,6 +9,7 @@ use {
         Fields,
         Ident,
         LitInt,
+        Path,
         Token,
         Type,
         UnOp,
@@ -23,6 +24,7 @@ pub(crate) struct Attributes {
     pub(crate) r#impl:        Vec<MethodOrFunction>,
     pub(crate) custom_fields: Option<Ident>,
     pub(crate) custom_impls:  Option<Ident>,
+    pub(crate) on_set:        Option<Path>,
 }
 
 #[derive(Debug)]
@@ -109,6 +111,10 @@ impl Attributes {
                 },
                 "custom_impls" => {
                     self.custom_impls = Some(meta.value()?.parse()?);
+                    Ok(())
+                },
+                "on_set" => {
+                    self.on_set = Some(meta.value()?.parse::<Path>()?);
                     Ok(())
                 },
                 _ => Err(meta.error(format!("Unexpected attribute name: {ident}"))),

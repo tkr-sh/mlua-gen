@@ -1,7 +1,7 @@
 use {
     proc_macro2::TokenStream as TokenStream2,
     quote::quote,
-    syn::{punctuated::Punctuated, Generics},
+    syn::{Generics, punctuated::Punctuated},
 };
 
 pub(crate) fn remove_ty_from_generics(generics: &Generics) -> TokenStream2 {

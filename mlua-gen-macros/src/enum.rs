@@ -5,9 +5,9 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{ToTokens, quote},
+    quote::{quote, ToTokens},
     std::iter::repeat_with,
-    syn::{DataEnum, Generics, Ident, Variant},
+    syn::{DataEnum, Generics, Ident, Path, Variant},
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for an enum
@@ -82,7 +82,12 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
     variants: I,
     custom_field: Option<syn::Ident>,
     custom_method_or_fn: Option<syn::Ident>,
+    on_set: Option<Path>,
 ) -> proc_macro2::TokenStream {
+    let on_set_call = match &on_set {
+        Some(path) => quote!( (#path)(); ),
+        None => quote!(),
+    };
     // Create the fields to access a value.
     let (impl_from_lua_match, fields): (Vec<_>, Vec<_>) = variants
         .map(|variant| {
@@ -140,6 +145,7 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
                                     *this = Self::#variant_ident {
                                         #(#field_constructors)*
                                     };
+                                    #on_set_call
                                     Ok(())
                                 }
                             );
@@ -205,6 +211,7 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
                                     *this = Self::#variant_ident(
                                         #(#indexed),*
                                     );
+                                    #on_set_call
                                     Ok(())
                                 }
                             );

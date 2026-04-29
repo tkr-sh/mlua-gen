@@ -7,7 +7,7 @@ use {
     proc_macro2::{Span, TokenStream as TokenStream2},
     quote::{quote, ToTokens},
     std::{collections::HashSet, iter::repeat_with},
-    syn::{parse_str, DataStruct, Field, Fields, Generics, Ident},
+    syn::{parse_str, DataStruct, Field, Fields, Generics, Ident, Path},
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for a struct
@@ -103,7 +103,12 @@ pub(crate) fn user_data(
     custom_field: Option<syn::Ident>,
     impls: Vec<MethodOrFunction>,
     custom_method_or_fn: Option<syn::Ident>,
+    on_set: Option<Path>,
 ) -> TokenStream2 {
+    let on_set_call = match &on_set {
+        Some(path) => quote!( (#path)(); ),
+        None => quote!(),
+    };
     let fields_declaration = match all_fields {
         Fields::Named(_) => {
             let get_and_set_fields = get_fields
@@ -162,6 +167,7 @@ pub(crate) fn user_data(
                                                     data.set(key.clone(), value)?;
 
                                                     this.lock().unwrap().#field_ident = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                                    #on_set_call
                                                     Ok(())
                                                 },
                                             )?
@@ -202,6 +208,7 @@ pub(crate) fn user_data(
                                             lua.create_function(move |_, (_, index, value): (::mlua::Table, <#field_ty as IsNewIndexable>::Key, <#field_ty as IsNewIndexable>::Item )| {
                                                 let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
                                                 this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
+                                                #on_set_call
                                                 Ok(())
                                             })?
                                         )
@@ -217,6 +224,7 @@ pub(crate) fn user_data(
                                             lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
                                                 let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
                                                 this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
+                                                #on_set_call
                                                 Ok(())
                                             })?
                                         )
@@ -244,6 +252,7 @@ pub(crate) fn user_data(
                                         #field_as_string,
                                         |_, this, v| {
                                             this.#field_ident = v;
+                                            #on_set_call
                                             Ok(())
                                         }
                                     );
