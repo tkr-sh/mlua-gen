@@ -1,6 +1,3 @@
-//! `on_set = <path>` on an enum: the hook fires once per Lua-side variant
-//! swap, for both unnamed and named variants.
-
 use {
     mlua_gen::{LuaBuilder, mlua_gen},
     std::sync::atomic::{AtomicUsize, Ordering},
@@ -25,8 +22,6 @@ pub fn test() {
     let lua = mlua::Lua::new();
     State::to_globals(&lua).unwrap();
 
-    // Seed with an Idle value so the .lua side can mutate it through the
-    // generated variant setters.
     lua.globals().set("state", State::Idle).unwrap();
 
     lua.globals()

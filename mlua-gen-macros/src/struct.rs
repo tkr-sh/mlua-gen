@@ -5,9 +5,9 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{quote, ToTokens},
+    quote::{ToTokens, quote},
     std::{collections::HashSet, iter::repeat_with},
-    syn::{parse_str, DataStruct, Field, Fields, Generics, Ident, Path},
+    syn::{DataStruct, Field, Fields, Generics, Ident, Path, parse_str},
 };
 
 /// Function that impl the `mlua_gen::LuaBuilder` trait for a struct
@@ -109,7 +109,7 @@ pub(crate) fn user_data(
         Some(path) => quote!( (#path)(); ),
         None => quote!(),
     };
-    let fields_declaration = match all_fields {
+    let (fields_declaration, meta_index) = match all_fields {
         Fields::Named(_) => {
             let get_and_set_fields = get_fields
                 .iter()
@@ -265,125 +265,61 @@ pub(crate) fn user_data(
                 fields_code.push(base_code);
             }
 
-            fields_code
+            (fields_code, quote!())
         },
-        Fields::Unnamed(_) | Fields::Unit => {
-            // TODO:
-            vec![]
+        Fields::Unnamed(_) => {
+            // Tuple-struct fields go through `__index` / `__newindex`
+            // meta-methods. Lua is 1-based so indices are converted at
+            // codegen time.
+            let get_arms = get_fields.iter().map(|field| {
+                let ident = &field.ident;
+                let lua_index: usize = field.ident_string.parse::<usize>().unwrap() + 1;
+                quote! {
+                    #lua_index => this.#ident.clone().into_lua(lua)?,
+                }
+            });
+
+            let set_arms = set_fields.iter().map(|field| {
+                let ident = &field.ident;
+                let ty = &field.ty;
+                let lua_index: usize = field.ident_string.parse::<usize>().unwrap() + 1;
+                quote! {
+                    #lua_index => {
+                        this.#ident = <#ty as ::mlua::FromLua>::from_lua(v, lua)?;
+                        #on_set_call
+                    },
+                }
+            });
+
+            let meta = quote! {
+                method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
+                    use ::mlua::IntoLua;
+                    Ok::<::mlua::Value, ::mlua::Error>(match index {
+                        #(#get_arms)*
+                        _ => return Err(::mlua::Error::runtime(
+                            format!("Invalid index: {index}")
+                        )),
+                    })
+                });
+
+                method_or_fns.add_meta_method_mut(
+                    "__newindex",
+                    |lua, this, (index, v): (usize, ::mlua::Value)| {
+                        match index {
+                            #(#set_arms)*
+                            _ => return Err::<(), _>(::mlua::Error::runtime(
+                                format!("Invalid index: {index}")
+                            )),
+                        }
+                        Ok(())
+                    },
+                );
+            };
+
+            (vec![], meta)
         },
+        Fields::Unit => (vec![], quote!()),
     };
-    //
-    // // }
-    // let (field_get_named, field_get_unnamed) = match all_fields {
-    //     Fields::Named(_) => {
-    //         (
-    //             get_fields
-    //                 .into_iter()
-    //                 .map(|field| {
-    //                     let field_ident = field.ident;
-    //                     let field_ident_string = field.ident_string;
-    //                     quote!(
-    //                         reserved_fields
-    //                             .add_field_method_get(
-    //                                 #field_ident_string,
-    //                                 |_, this| Ok(this.#field_ident.clone())
-    //                             );
-    //                     )
-    //                 })
-    //                 .collect::<Vec<TokenStream2>>(),
-    //             Vec::new(),
-    //         )
-    //     },
-    //     Fields::Unnamed(_) => {
-    //         (
-    //             Vec::new(),
-    //             get_fields
-    //                 .into_iter()
-    //                 .map(|field| {
-    //                     // Since it's an unnamed struct, it should be a usize
-    //                     let field_int = field.ident;
-    //                     quote!(
-    //                         #field_int => this.#field_int.clone().into_lua(&lua)?,
-    //                     )
-    //                 })
-    //                 .collect::<Vec<TokenStream2>>(),
-    //         )
-    //     },
-    //     Fields::Unit => (Vec::new(), Vec::new()),
-    // };
-    //
-    // // Is either a:
-    // // - When `all_fields` is Named: `Vec` of `.add_method_field_set(...)`
-    // // - When `all_fields` is Unnamed: `Vec` of `match` arms for __newindex
-    // // - When `all_fields` is Unit: `Vec::new`
-    // let (field_set_named, field_set_unnamed) = match all_fields {
-    //     Fields::Named(_) => {
-    //         (
-    //             set_fields
-    //                 .into_iter()
-    //                 .map(|field| {
-    //                     let field_ident = field.ident;
-    //                     let field_ident_string = field.ident_string;
-    //
-    //                     quote!(
-    //                         reserved_fields
-    //                             .add_field_method_set(
-    //                                 #field_ident_string,
-    //                                 |_, this, v| {
-    //                                     this.#field_ident = v;
-    //                                     Ok(())
-    //                                 }
-    //                             );
-    //                     )
-    //                 })
-    //                 .collect::<Vec<TokenStream2>>(),
-    //             Vec::new(),
-    //         )
-    //     },
-    //     Fields::Unnamed(_) => {
-    //         (
-    //             Vec::new(),
-    //             set_fields
-    //                 .into_iter()
-    //                 .map(|field| {
-    //                     // Since it's an unnamed struct, it should be a usize
-    //                     let field_int = field.ident;
-    //                     quote!(
-    //                         #field_int => this.#field_int = mlua::FromLua::from_lua(v, &lua)?,
-    //                     )
-    //                 })
-    //                 .collect::<Vec<TokenStream2>>(),
-    //         )
-    //     },
-    //     Fields::Unit => (Vec::new(), Vec::new()),
-    // };
-
-
-
-    // let meta_index = if matches!(all_fields, Fields::Unnamed(_)) {
-    //     quote!(
-    //         method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
-    //             use ::mlua::IntoLua;
-    //             Ok(match index - 1 {
-    //                 #(#field_get_unnamed)*
-    //                 _ => return Err::<::mlua::Value, _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
-    //             })
-    //         });
-    //
-    //         method_or_fns.add_meta_method_mut("__newindex", |lua, this: &mut Self, (index, v): (usize, ::mlua::Value)| {
-    //             match index - 1 {
-    //                 #(#field_set_unnamed)*
-    //                 _ => return Err::<(), _>(::mlua::Error::runtime(format!("Invalid index: {index}"))),
-    //             }
-    //
-    //             Ok(())
-    //         });
-    //     )
-    // } else {
-    //     quote!()
-    // };
-
-
 
     // Field
     let (field_extra, struct_constructor) = (
@@ -516,6 +452,7 @@ pub(crate) fn user_data(
 
             fn add_methods<MluaUserDataMethods: ::mlua::UserDataMethods<Self>>(method_or_fns: &mut MluaUserDataMethods) {
                 #(#method_or_fns)*
+                #meta_index
                 #method_or_fn_extra
             }
         }

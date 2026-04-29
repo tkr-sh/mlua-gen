@@ -1,6 +1,3 @@
-//! `on_set = <path>` on a struct: the hook fires once per Lua-side field
-//! write, immediately after the new value has been stored.
-
 use {
     mlua_gen::{LuaBuilder, mlua_gen},
     std::sync::atomic::{AtomicUsize, Ordering},
@@ -23,7 +20,6 @@ pub fn test() {
     let lua = mlua::Lua::new();
     App::to_globals(&lua).unwrap();
 
-    // Expose the hit count to Lua so the .lua side can assert against it.
     lua.globals()
         .set(
             "hits",

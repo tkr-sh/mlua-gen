@@ -1,12 +1,5 @@
-//! Negative test: when `on_set` is not specified the macro must produce code
-//! byte-identical to the pre-feature output, i.e. no hook is ever called.
-//!
-//! We register a sentinel free function that would tick a counter if codegen
-//! accidentally reached for it, then assert the counter stays at 0 after a
-//! Lua-side write.
-
 use {
-    mlua_gen::{mlua_gen, LuaBuilder},
+    mlua_gen::{LuaBuilder, mlua_gen},
     std::sync::atomic::{AtomicUsize, Ordering},
 };
 
