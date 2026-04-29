@@ -132,6 +132,8 @@ pub(crate) fn user_data(
                     // - add_field_method_get => for non indexable and into_lua
 
                     match (<#field_ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED, <#field_ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE) {
+                        // Nested `#[mlua_gen]` field: proxy table that snapshots
+                        // and projects on read, snapshot-write-back on set.
                         (true, _) => {
                             reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
                                 use ::mlua::IntoLua;
@@ -143,9 +145,15 @@ pub(crate) fn user_data(
                                     meta_table.push(
                                         (
                                             "__index",
-                                            lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
-                                                let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                Ok(this.lock().unwrap().#field_ident.clone())
+                                            lua.create_function(move |lua, (_, key): (::mlua::Table, ::mlua::Value)| {
+                                                use ::mlua::{IntoLua, ObjectLike};
+                                                let snapshot = ::mlua_gen::with_parent::<Self, _>(&this, |this| {
+                                                    this.#field_ident.clone().into_lua(lua)
+                                                })?;
+                                                let ::mlua::Value::UserData(data) = snapshot else {
+                                                    unreachable!("mlua_gen field always converts to UserData")
+                                                };
+                                                data.get::<::mlua::Value>(key)
                                             })?
                                         )
                                     );
@@ -158,15 +166,21 @@ pub(crate) fn user_data(
                                             lua.create_function(
                                                 move |lua, (_, key, value): (::mlua::Table, String, ::mlua::Value)| {
                                                     use ::mlua::IntoLua;
-                                                    let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                    let ::mlua::Value::UserData(data) = this.lock().unwrap().#field_ident.clone().into_lua(lua)? else {
-                                                        unreachable!("Conversion of types that come from mlua-gen should ALWAYS be converted to UserData")
+                                                    let snapshot = ::mlua_gen::with_parent::<Self, _>(&this_clone, |this| {
+                                                        this.#field_ident.clone().into_lua(lua)
+                                                    })?;
+                                                    let ::mlua::Value::UserData(data) = snapshot else {
+                                                        unreachable!("mlua_gen field always converts to UserData")
                                                     };
 
                                                     use ::mlua::ObjectLike;
                                                     data.set(key.clone(), value)?;
 
-                                                    this.lock().unwrap().#field_ident = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                                    let new_value: #field_ty = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                                    ::mlua_gen::with_parent_mut::<Self, _>(&this_clone, |this| {
+                                                        this.#field_ident = new_value;
+                                                        Ok(())
+                                                    })?;
                                                     #on_set_call
                                                     Ok(())
                                                 },
@@ -180,55 +194,70 @@ pub(crate) fn user_data(
                                 table.into_lua(lua)
                             });
                         }
+                        // Indexable collection of leaf values. Routes through
+                        // `IsIndexable` / `IsNewIndexable` / `IsMutIndexable`.
                         (false, true) => {
                             reserved_fields.add_field_function_get(#field_as_string, |lua: &::mlua::Lua, this: ::mlua::AnyUserData| {
                                 use ::mlua::IntoLua;
 
                                 let table = lua.create_table()?;
                                 let this_clone = this.clone();
-                                // TODO get/set checks
-                                //meanwhlie:
+                                let mut meta_table = vec![];
 
-                                let mut meta_table = vec![
-                                    (
-                                        "__index",
-                                        lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
-                                            use mlua_gen::IsIndexable;
-                                            let this = this.borrow::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                            Ok(this.lock().unwrap().#field_ident.index_or_unreachable(index - 1))
-                                        })?
-                                    )
-                                ];
-
-                                if <#field_ty as ::mlua_gen::IsNewIndexable>::IS_NEW_INDEXABLE {
-                                    use ::mlua_gen::IsNewIndexable;
+                                if #is_get {
                                     meta_table.push(
                                         (
-                                            "__newindex",
-                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, <#field_ty as IsNewIndexable>::Key, <#field_ty as IsNewIndexable>::Item )| {
-                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
-                                                #on_set_call
-                                                Ok(())
+                                            "__index",
+                                            lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                                use ::mlua_gen::IsIndexable;
+                                                let index = index.checked_sub(1).ok_or_else(|| {
+                                                    ::mlua::Error::runtime("Lua indices start at 1")
+                                                })?;
+                                                ::mlua_gen::with_parent::<Self, _>(&this, |this| {
+                                                    Ok(this.#field_ident.index_or_unreachable(index))
+                                                })
                                             })?
                                         )
                                     );
                                 }
-                                // If it doesn't impelemnt [`NewIndex`] but only [`IndexMut`],
-                                // still implement it
-                                else if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
-                                    use ::mlua_gen::IsMutIndexable;
-                                    meta_table.push(
-                                        (
-                                            "__newindex",
-                                            lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
-                                                let mut this = this_clone.borrow_mut::<::std::sync::Arc<::std::sync::Mutex<Self>>>()?;
-                                                this.lock().unwrap().#field_ident.set_index_or_unreachable(index, value);
-                                                #on_set_call
-                                                Ok(())
-                                            })?
-                                        )
-                                    );
+
+                                if #is_set {
+                                    if <#field_ty as ::mlua_gen::IsNewIndexable>::IS_NEW_INDEXABLE {
+                                        use ::mlua_gen::IsNewIndexable;
+                                        meta_table.push(
+                                            (
+                                                "__newindex",
+                                                lua.create_function(move |_, (_, index, value): (::mlua::Table, <#field_ty as IsNewIndexable>::Key, <#field_ty as IsNewIndexable>::Item )| {
+                                                    ::mlua_gen::with_parent_mut::<Self, _>(&this_clone, |this| {
+                                                        this.#field_ident.set_index_or_unreachable(index, value);
+                                                        Ok(())
+                                                    })?;
+                                                    #on_set_call
+                                                    Ok(())
+                                                })?
+                                            )
+                                        );
+                                    }
+                                    // No `NewIndex`, fall back to `IndexMut`.
+                                    else if <#field_ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
+                                        use ::mlua_gen::IsMutIndexable;
+                                        meta_table.push(
+                                            (
+                                                "__newindex",
+                                                lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#field_ty as IsMutIndexable>::IndexType )| {
+                                                    let index = index.checked_sub(1).ok_or_else(|| {
+                                                        ::mlua::Error::runtime("Lua indices start at 1")
+                                                    })?;
+                                                    ::mlua_gen::with_parent_mut::<Self, _>(&this_clone, |this| {
+                                                        this.#field_ident.set_index_or_unreachable(index, value);
+                                                        Ok(())
+                                                    })?;
+                                                    #on_set_call
+                                                    Ok(())
+                                                })?
+                                            )
+                                        );
+                                    }
                                 }
 
                                 let mt = lua.create_table_from(meta_table)?;
@@ -268,14 +297,119 @@ pub(crate) fn user_data(
             (fields_code, quote!())
         },
         Fields::Unnamed(_) => {
-            // Tuple-struct fields go through `__index` / `__newindex`
-            // meta-methods. Lua is 1-based so indices are converted at
-            // codegen time.
+            // Tuple struct: `__index` / `__newindex` meta-functions on the
+            // struct, with the same `(IS_MLUA_GENERATED, IS_INDEXABLE)` arms
+            // as named structs. Lua is 1-based; conversion is at codegen.
             let get_arms = get_fields.iter().map(|field| {
                 let ident = &field.ident;
+                let ty = &field.ty;
                 let lua_index: usize = field.ident_string.parse::<usize>().unwrap() + 1;
                 quote! {
-                    #lua_index => this.#ident.clone().into_lua(lua)?,
+                    #lua_index => {
+                        match (
+                            <#ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED,
+                            <#ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE,
+                        ) {
+                            (true, _) => {
+                                let parent = this.clone();
+                                let inner_table = lua.create_table()?;
+                                let parent_for_get = parent.clone();
+                                let parent_for_set = parent;
+                                let mut meta_table = vec![];
+                                meta_table.push((
+                                    "__index",
+                                    lua.create_function(move |lua, (_, key): (::mlua::Table, ::mlua::Value)| {
+                                        use ::mlua::{IntoLua, ObjectLike};
+                                        let snapshot = ::mlua_gen::with_parent::<Self, _>(&parent_for_get, |this| {
+                                            this.#ident.clone().into_lua(lua)
+                                        })?;
+                                        let ::mlua::Value::UserData(data) = snapshot else {
+                                            unreachable!("mlua_gen field always converts to UserData")
+                                        };
+                                        data.get::<::mlua::Value>(key)
+                                    })?,
+                                ));
+                                meta_table.push((
+                                    "__newindex",
+                                    lua.create_function(move |lua, (_, key, value): (::mlua::Table, String, ::mlua::Value)| {
+                                        use ::mlua::{IntoLua, ObjectLike};
+                                        let snapshot = ::mlua_gen::with_parent::<Self, _>(&parent_for_set, |this| {
+                                            this.#ident.clone().into_lua(lua)
+                                        })?;
+                                        let ::mlua::Value::UserData(data) = snapshot else {
+                                            unreachable!("mlua_gen field always converts to UserData")
+                                        };
+                                        data.set(key.clone(), value)?;
+                                        let new_value: #ty = ::mlua::FromLua::from_lua(::mlua::Value::UserData(data), lua)?;
+                                        ::mlua_gen::with_parent_mut::<Self, _>(&parent_for_set, |this| {
+                                            this.#ident = new_value;
+                                            Ok(())
+                                        })?;
+                                        #on_set_call
+                                        Ok(())
+                                    })?,
+                                ));
+                                inner_table.set_metatable(Some(lua.create_table_from(meta_table)?));
+                                inner_table.into_lua(lua)?
+                            },
+                            (false, true) => {
+                                let parent = this.clone();
+                                let inner_table = lua.create_table()?;
+                                let parent_for_get = parent.clone();
+                                let parent_for_set = parent;
+                                let mut meta_table = vec![];
+                                meta_table.push((
+                                    "__index",
+                                    lua.create_function(move |_, (_, index): (::mlua::Table, usize)| {
+                                        use ::mlua_gen::IsIndexable;
+                                        let index = index.checked_sub(1).ok_or_else(|| {
+                                            ::mlua::Error::runtime("Lua indices start at 1")
+                                        })?;
+                                        ::mlua_gen::with_parent::<Self, _>(&parent_for_get, |this| {
+                                            Ok(this.#ident.index_or_unreachable(index))
+                                        })
+                                    })?,
+                                ));
+                                if <#ty as ::mlua_gen::IsNewIndexable>::IS_NEW_INDEXABLE {
+                                    use ::mlua_gen::IsNewIndexable;
+                                    meta_table.push((
+                                        "__newindex",
+                                        lua.create_function(move |_, (_, index, value): (::mlua::Table, <#ty as IsNewIndexable>::Key, <#ty as IsNewIndexable>::Item)| {
+                                            ::mlua_gen::with_parent_mut::<Self, _>(&parent_for_set, |this| {
+                                                this.#ident.set_index_or_unreachable(index, value);
+                                                Ok(())
+                                            })?;
+                                            #on_set_call
+                                            Ok(())
+                                        })?,
+                                    ));
+                                } else if <#ty as ::mlua_gen::IsMutIndexable>::IS_MUT_INDEXABLE {
+                                    use ::mlua_gen::IsMutIndexable;
+                                    meta_table.push((
+                                        "__newindex",
+                                        lua.create_function(move |_, (_, index, value): (::mlua::Table, usize, <#ty as IsMutIndexable>::IndexType)| {
+                                            let index = index.checked_sub(1).ok_or_else(|| {
+                                                ::mlua::Error::runtime("Lua indices start at 1")
+                                            })?;
+                                            ::mlua_gen::with_parent_mut::<Self, _>(&parent_for_set, |this| {
+                                                this.#ident.set_index_or_unreachable(index, value);
+                                                Ok(())
+                                            })?;
+                                            #on_set_call
+                                            Ok(())
+                                        })?,
+                                    ));
+                                }
+                                inner_table.set_metatable(Some(lua.create_table_from(meta_table)?));
+                                inner_table.into_lua(lua)?
+                            },
+                            (false, false) => {
+                                ::mlua_gen::with_parent::<Self, _>(&this, |this| {
+                                    this.#ident.clone().into_lua(lua)
+                                })?
+                            },
+                        }
+                    },
                 }
             });
 
@@ -285,14 +419,18 @@ pub(crate) fn user_data(
                 let lua_index: usize = field.ident_string.parse::<usize>().unwrap() + 1;
                 quote! {
                     #lua_index => {
-                        this.#ident = <#ty as ::mlua::FromLua>::from_lua(v, lua)?;
+                        let v = <#ty as ::mlua::FromLua>::from_lua(v, lua)?;
+                        ::mlua_gen::with_parent_mut::<Self, _>(&this, |this| {
+                            this.#ident = v;
+                            Ok(())
+                        })?;
                         #on_set_call
                     },
                 }
             });
 
             let meta = quote! {
-                method_or_fns.add_meta_method("__index", |lua, this, index: usize| {
+                method_or_fns.add_meta_function("__index", |lua, (this, index): (::mlua::AnyUserData, usize)| {
                     use ::mlua::IntoLua;
                     Ok::<::mlua::Value, ::mlua::Error>(match index {
                         #(#get_arms)*
@@ -302,9 +440,9 @@ pub(crate) fn user_data(
                     })
                 });
 
-                method_or_fns.add_meta_method_mut(
+                method_or_fns.add_meta_function(
                     "__newindex",
-                    |lua, this, (index, v): (usize, ::mlua::Value)| {
+                    |lua, (this, index, v): (::mlua::AnyUserData, usize, ::mlua::Value)| {
                         match index {
                             #(#set_arms)*
                             _ => return Err::<(), _>(::mlua::Error::runtime(

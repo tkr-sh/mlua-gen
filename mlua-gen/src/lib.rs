@@ -4,13 +4,51 @@
 
 mod trait_helpers;
 use {
-    mlua::{FromLua, IntoLua},
+    mlua::{AnyUserData, FromLua, IntoLua},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         hash::Hash,
+        sync::{Arc, Mutex},
     },
 };
 pub use {mlua_gen_macros::mlua_gen, trait_helpers::*};
+
+/// Borrow a parent `AnyUserData` as `&T`, falling back to
+/// `&Arc<Mutex<T>>` when the parent was injected pre-wrapped.
+#[doc(hidden)]
+pub fn with_parent<T: 'static, R>(
+    ud: &AnyUserData,
+    f: impl FnOnce(&T) -> mlua::Result<R>,
+) -> mlua::Result<R> {
+    match ud.borrow::<T>() {
+        Ok(this) => f(&this),
+        Err(_) => {
+            let arc = ud.borrow::<Arc<Mutex<T>>>()?;
+            let guard = arc
+                .lock()
+                .map_err(|_| mlua::Error::runtime("parent mutex poisoned"))?;
+            f(&guard)
+        },
+    }
+}
+
+/// Mutable [`with_parent`].
+#[doc(hidden)]
+pub fn with_parent_mut<T: 'static, R>(
+    ud: &AnyUserData,
+    f: impl FnOnce(&mut T) -> mlua::Result<R>,
+) -> mlua::Result<R> {
+    match ud.borrow_mut::<T>() {
+        Ok(mut this) => f(&mut this),
+        Err(_) => {
+            let arc = ud.borrow::<Arc<Mutex<T>>>()?;
+            let mut guard = arc
+                .lock()
+                .map_err(|_| mlua::Error::runtime("parent mutex poisoned"))?;
+            f(&mut guard)
+        },
+    }
+}
 
 pub trait LuaBuilder<R: IntoLua + FromLua, Lua, E, Table> {
     /// Creates the constructor for a struct or enum.
