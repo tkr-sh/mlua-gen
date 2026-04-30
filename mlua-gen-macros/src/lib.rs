@@ -10,6 +10,7 @@ use {
 pub(crate) mod attr;
 pub(crate) mod builder;
 mod r#enum;
+pub(crate) mod project;
 mod shared;
 pub(crate) mod r#struct;
 

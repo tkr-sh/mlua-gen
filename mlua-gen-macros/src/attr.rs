@@ -1,10 +1,8 @@
 use {
     crate::r#struct,
-    quote::{quote, ToTokens},
+    quote::{ToTokens, quote},
     std::collections::VecDeque,
     syn::{
-        meta::ParseNestedMeta,
-        spanned::Spanned,
         ExprArray,
         Fields,
         Ident,
@@ -14,6 +12,8 @@ use {
         Type,
         UnOp,
         Visibility,
+        meta::ParseNestedMeta,
+        spanned::Spanned,
     },
 };
 

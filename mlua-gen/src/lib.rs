@@ -2,6 +2,7 @@
 #![feature(never_type)]
 #![feature(specialization)]
 
+mod proxy;
 mod trait_helpers;
 use {
     mlua::{AnyUserData, FromLua, IntoLua},
@@ -11,7 +12,7 @@ use {
         sync::{Arc, Mutex},
     },
 };
-pub use {mlua_gen_macros::mlua_gen, trait_helpers::*};
+pub use {mlua_gen_macros::mlua_gen, proxy::*, trait_helpers::*};
 
 /// Borrow a parent `AnyUserData` as `&T`, falling back to
 /// `&Arc<Mutex<T>>` when the parent was injected pre-wrapped.

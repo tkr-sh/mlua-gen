@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 #[test]
 pub fn test() -> mlua::Result<()> {
@@ -45,14 +42,12 @@ pub fn test() -> mlua::Result<()> {
 
     assert_eq!(vec_wrapper.lock().unwrap().other.a, 1);
 
-    // Depth-2 read works.
     assert_eq!(vec_wrapper.lock().unwrap().other.deeper.deep, 19);
     lua.load("assert(vec_wrapper.other.deeper.deep == 19)")
         .exec()?;
 
-    // TODO(phase 2): depth-2 write doesn't propagate yet.
-    // lua.load("vec_wrapper.other.deeper.deep = 1").exec()?;
-    // assert_eq!(vec_wrapper.lock().unwrap().other.deeper.deep, 1);
+    lua.load("vec_wrapper.other.deeper.deep = 1").exec()?;
+    assert_eq!(vec_wrapper.lock().unwrap().other.deeper.deep, 1);
 
     Ok(())
 }

@@ -1,12 +1,12 @@
 use {
     mlua::{FromLua, IntoLua},
-    mlua_gen::{mlua_gen, LuaBuilder},
+    mlua_gen::{LuaBuilder, mlua_gen},
 };
 
 #[test]
 pub fn test() {
     #[mlua_gen]
-    struct Test<T: FromLua + Clone + IntoLua + 'static> {
+    struct Test<T: FromLua + Clone + IntoLua + Send + Sync + 'static> {
         pub name: T,
     }
 

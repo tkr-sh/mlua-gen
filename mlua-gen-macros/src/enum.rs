@@ -5,7 +5,7 @@ use {
         shared::remove_ty_from_generics,
     },
     proc_macro2::{Span, TokenStream as TokenStream2},
-    quote::{quote, ToTokens},
+    quote::{ToTokens, quote},
     std::iter::repeat_with,
     syn::{DataEnum, Generics, Ident, Path, Variant},
 };
@@ -284,6 +284,42 @@ pub(crate) fn user_data<'l, I: Iterator<Item = &'l Variant>>(
     let non_typed_generics = remove_ty_from_generics(generics);
 
     quote! {
+        // Phase 2 leaves enum projection as a stub. Phase 3 replaces this
+        // with variant-aware projection.
+        impl #generics ::mlua_gen::MluaGenProject for #name #non_typed_generics {
+            fn project_get(
+                &self,
+                _lua: &::mlua::Lua,
+                _steps: &[::mlua_gen::PathStep],
+            ) -> ::mlua::Result<::mlua::Value> {
+                Err(::mlua::Error::runtime(
+                    "enum projection not implemented (Phase 3)",
+                ))
+            }
+
+            fn project_set(
+                &mut self,
+                _lua: &::mlua::Lua,
+                _steps: &[::mlua_gen::PathStep],
+                _value: ::mlua::Value,
+            ) -> ::mlua::Result<()> {
+                Err(::mlua::Error::runtime(
+                    "enum projection not implemented (Phase 3)",
+                ))
+            }
+
+            fn build_proxy(
+                _lua: &::mlua::Lua,
+                _ctx: ::mlua_gen::Resolver,
+                _path: ::std::vec::Vec<::mlua_gen::PathStep>,
+                _vis: ::mlua_gen::Visibility,
+            ) -> ::mlua::Result<::mlua::Table> {
+                Err(::mlua::Error::runtime(
+                    "enum projection not implemented (Phase 3)",
+                ))
+            }
+        }
+
         impl #generics ::mlua::FromLua for #name #non_typed_generics{
             fn from_lua(value: ::mlua::Value, lua: &::mlua::Lua) -> ::mlua::Result<#name #non_typed_generics> {
                 match value {
