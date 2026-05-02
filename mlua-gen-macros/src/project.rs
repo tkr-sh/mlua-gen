@@ -114,33 +114,11 @@ fn build_proxy_body(
     }
 }
 
-fn build_proxy_named(get_fields: &[MinimalField], set_fields: &[MinimalField]) -> TokenStream2 {
-    let index_arms = get_fields.iter().map(|f| {
-        let ty = &f.ty;
-        let name = &f.ident_string;
-        quote! {
-            #name => {
-                let mut p = path_g.clone();
-                p.push(::mlua_gen::PathStep::Field(#name));
-                proxy_index_dispatch::<#ty>(lua, ctx_g.clone(), p)
-            }
-        }
-    });
-
-    let newindex_arms = set_fields.iter().map(|f| {
-        let ty = &f.ty;
-        let name = &f.ident_string;
-        quote! {
-            #name => {
-                let mut p = path_s.clone();
-                p.push(::mlua_gen::PathStep::Field(#name));
-                proxy_newindex_dispatch::<#ty>(lua, ctx_s.clone(), p, value)
-            }
-        }
-    });
-
+/// Helper-fn definitions shared by every proxy `__index` / `__newindex`
+/// closure: monomorphised per field type so the const probes prune to a
+/// single arm at codegen.
+pub(crate) fn proxy_dispatch_helpers() -> TokenStream2 {
     quote! {
-        // Monomorphised per field type so const probes prune to one arm.
         fn proxy_index_dispatch<Ty>(
             lua: &::mlua::Lua,
             ctx: ::mlua_gen::Resolver,
@@ -192,6 +170,37 @@ fn build_proxy_named(get_fields: &[MinimalField], set_fields: &[MinimalField]) -
             ctx.fire_on_set();
             Ok(())
         }
+    }
+}
+
+fn build_proxy_named(get_fields: &[MinimalField], set_fields: &[MinimalField]) -> TokenStream2 {
+    let index_arms = get_fields.iter().map(|f| {
+        let ty = &f.ty;
+        let name = &f.ident_string;
+        quote! {
+            #name => {
+                let mut p = path_g.clone();
+                p.push(::mlua_gen::PathStep::Field(#name));
+                proxy_index_dispatch::<#ty>(lua, ctx_g.clone(), p)
+            }
+        }
+    });
+
+    let newindex_arms = set_fields.iter().map(|f| {
+        let ty = &f.ty;
+        let name = &f.ident_string;
+        quote! {
+            #name => {
+                let mut p = path_s.clone();
+                p.push(::mlua_gen::PathStep::Field(#name));
+                proxy_newindex_dispatch::<#ty>(lua, ctx_s.clone(), p, value)
+            }
+        }
+    });
+
+    let helpers = proxy_dispatch_helpers();
+    quote! {
+        #helpers
 
         let table = lua.create_table()?;
         let mt = lua.create_table()?;
@@ -263,58 +272,9 @@ fn build_proxy_unnamed(get_fields: &[MinimalField], set_fields: &[MinimalField])
         }
     });
 
+    let helpers = proxy_dispatch_helpers();
     quote! {
-        fn proxy_index_dispatch<Ty>(
-            lua: &::mlua::Lua,
-            ctx: ::mlua_gen::Resolver,
-            p: ::std::vec::Vec<::mlua_gen::PathStep>,
-        ) -> ::mlua::Result<::mlua::Value>
-        where
-            Ty: ::mlua_gen::MluaGenProjectMaybe
-                + ::mlua_gen::IsMluaGenerated
-                + ::mlua_gen::CollectionProject
-                + ::mlua_gen::IsIndexable,
-        {
-            match (
-                <Ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED,
-                <Ty as ::mlua_gen::CollectionProject>::IS_COLLECTION_OF_MLUA_GEN,
-                <Ty as ::mlua_gen::IsIndexable>::IS_INDEXABLE,
-            ) {
-                (true, _, _) => Ok(::mlua::Value::Table(
-                    <Ty as ::mlua_gen::MluaGenProjectMaybe>::maybe_build_proxy(
-                        lua, ctx, p, ::mlua_gen::Visibility::Both,
-                    )?,
-                )),
-                (_, true, _) => Ok(::mlua::Value::Table(
-                    <Ty as ::mlua_gen::CollectionProject>::build_collection_proxy(
-                        lua, ctx, p, ::mlua_gen::Visibility::Both,
-                    )?,
-                )),
-                (_, _, true) => Ok(::mlua::Value::Table(
-                    ::mlua_gen::build_indexed_proxy_leaf(
-                        lua, ctx, p, ::mlua_gen::Visibility::Both,
-                    )?,
-                )),
-                (false, false, false) => (ctx.get)(lua, &p),
-            }
-        }
-
-        fn proxy_newindex_dispatch<Ty>(
-            lua: &::mlua::Lua,
-            ctx: ::mlua_gen::Resolver,
-            p: ::std::vec::Vec<::mlua_gen::PathStep>,
-            value: ::mlua::Value,
-        ) -> ::mlua::Result<()>
-        where
-            Ty: ::mlua_gen::MluaGenProjectMaybe
-                + ::mlua_gen::IsMluaGenerated
-                + ::mlua_gen::CollectionProject
-                + ::mlua_gen::IsIndexable,
-        {
-            (ctx.set)(lua, &p, value)?;
-            ctx.fire_on_set();
-            Ok(())
-        }
+        #helpers
 
         let table = lua.create_table()?;
         let mt = lua.create_table()?;
@@ -381,7 +341,7 @@ fn unnamed_arms(
     (quote!(#(#get)*), quote!(#(#set)*))
 }
 
-fn field_get_body(access: &TokenStream2, ty: &syn::Type, name: &str) -> TokenStream2 {
+pub(crate) fn field_get_body(access: &TokenStream2, ty: &syn::Type, name: &str) -> TokenStream2 {
     quote! {
         match (
             <#ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED,
@@ -421,7 +381,7 @@ fn field_get_body(access: &TokenStream2, ty: &syn::Type, name: &str) -> TokenStr
     }
 }
 
-fn field_set_body(access: &TokenStream2, ty: &syn::Type, name: &str) -> TokenStream2 {
+pub(crate) fn field_set_body(access: &TokenStream2, ty: &syn::Type, name: &str) -> TokenStream2 {
     quote! {
         match (
             <#ty as ::mlua_gen::IsMluaGenerated>::IS_MLUA_GENERATED,

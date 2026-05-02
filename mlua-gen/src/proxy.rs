@@ -19,7 +19,6 @@ pub enum PathStep {
     Tuple(usize),
     /// Raw Lua key; the generated arm converts it.
     Index(Value),
-    #[allow(dead_code, reason = "enum variants land in a later pass")]
     Variant(&'static str),
 }
 

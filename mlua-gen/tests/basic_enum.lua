@@ -12,13 +12,7 @@ assert(dog.dog[2] == 20)
 assert(cat.cat.name == "nyan")
 assert(cat.cat.age == 20)
 
--- Changing value
-local new_dog = dog.dog
-new_dog[1] = "doggy"
-assert(dog.dog[1] == "doggo")
-assert(new_dog[1] == "doggy")
-dog.dog = new_dog
-
+dog.dog[1] = "doggy"
 assert(dog.dog[1] == "doggy")
 assert(dog.dog[2] == 20)
 
